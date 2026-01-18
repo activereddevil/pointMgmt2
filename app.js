@@ -737,6 +737,37 @@ function subscribeToData() {
             const cfg = settingsDoc.data();
             config = { ...config, ...cfg };
 
+            // --- ✅ [เพิ่มส่วนนี้] จัดการแสดงผลประกาศ ---
+            const announceBanner = document.getElementById('announcement-banner');
+            const announceText = document.getElementById('announcement-text');
+            const announceDate = document.getElementById('announcement-date');
+            const settingInput = document.getElementById('setting-announcement-input');
+
+            if (config.announcement_msg) {
+                // มีประกาศ -> โชว์แบนเนอร์
+                if (announceBanner) {
+                    announceBanner.classList.remove('hidden');
+                    announceText.textContent = config.announcement_msg;
+                    
+                    // แปลงเวลาให้สวยงาม
+                    if (config.announcement_time) {
+                        let dateObj = config.announcement_time.toDate ? config.announcement_time.toDate() : new Date(config.announcement_time);
+                        announceDate.textContent = dateObj.toLocaleDateString('th-TH', {
+                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        });
+                    }
+                }
+            } else {
+                // ไม่มีประกาศ -> ซ่อนแบนเนอร์
+                if (announceBanner) announceBanner.classList.add('hidden');
+            }
+
+            // อัปเดตช่องกรอกในหน้า Setting (เฉพาะครู)
+            if (settingInput && document.activeElement !== settingInput) {
+                settingInput.value = config.announcement_msg || '';
+            }
+    // ------------------------------------------
+
             // --- 🤖 AUTO INTEREST CHANGE LOGIC ---
             checkAndRenderScheduledInterest(); // แสดงผล UI
             
@@ -7882,4 +7913,31 @@ window.renderStudentGuild = () => {
 
         </div>
     `;
+};
+
+// 📂 app.js
+
+window.saveAnnouncement = async () => {
+    const msg = document.getElementById('setting-announcement-input').value.trim();
+    
+    try {
+        const batch = writeBatch(db);
+        
+        // ✅ แก้ไข: ใช้ collections.config() เพื่ออ้างอิง Path ที่ถูกต้อง (มี 'data' คั่น)
+        // ผลลัพธ์จะเป็น: artifacts/appId/public/data/config/school_settings (6 ส่วน = ถูกต้อง)
+        const configRef = doc(collections.config(), 'school_settings');
+        
+        // บันทึกข้อความและเวลา
+        batch.set(configRef, { 
+            announcement_msg: msg,
+            announcement_time: serverTimestamp() 
+        }, { merge: true });
+
+        await batch.commit();
+        showToast(msg ? '✅ ส่งประกาศเรียบร้อย!' : '🗑️ ลบประกาศแล้ว');
+        
+    } catch (e) {
+        console.error(e);
+        alert('Error: ' + e.message);
+    }
 };
