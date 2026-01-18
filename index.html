@@ -1,0 +1,1957 @@
+<!doctype html>
+<html lang="th" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดเก็บแต้มนักเรียน (Admin Centralized)</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="css/style.css">
+
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3135/3135715.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- Google Fonts: Noto Sans Thai -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script type="module" src="js/app.js"></script>
+ </head>
+ <body class="h-full bg-gray-50">
+
+  <!-- ==================== LOGIN SCREEN ==================== -->
+  <div id="login-screen" class="fixed inset-0 z-[100] bg-gray-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row h-auto min-h-[650px] md:min-h-0 md:h-[500px]">
+      
+      <!-- Left Side: Hero -->
+      <div class="md:w-1/2 login-gradient p-10 flex flex-col justify-center items-center text-white text-center relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+           <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full"><path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" /></svg>
+        </div>
+        <h1 class="text-4xl font-bold mb-4">Student Points</h1>
+        <p class="text-lg opacity-90 mb-8">ระบบสะสมแต้มและจัดการพฤติกรรมนักเรียน</p>
+        <div class="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm mb-4 text-4xl">
+          👹
+        </div>
+      </div>
+
+      <!-- Right Side: Forms -->
+      <div class="md:w-1/2 p-8 relative flex flex-col">
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-200 mb-8">
+          <button onclick="switchLoginTab('student')" id="btn-login-student" class="flex-1 py-3 font-medium text-red-600 border-b-2 border-red-600 transition-colors">นักเรียน</button>
+          <button onclick="switchLoginTab('teacher')" id="btn-login-teacher" class="flex-1 py-3 font-medium text-gray-400 border-b-2 border-transparent hover:text-gray-600 transition-colors">ครู</button>
+        </div>
+
+        <!-- Student Login Form -->
+        <div id="form-login-student" class="flex-1 flex flex-col justify-center space-y-6">
+            <div class="text-center mb-2">
+              <h2 class="text-2xl font-bold text-gray-800">เข้าสู่ระบบนักเรียน</h2>
+              <p class="text-gray-500 text-sm">กรุณาระบุตัวตนเพื่อความปลอดภัย 🔐</p>
+            </div>
+            <div class="space-y-3">
+              <div>
+                  <label class="block text-gray-700 font-bold mb-1 text-sm">👤 เลขประจำตัว</label>
+                  <input type="text" id="login-student-id" placeholder="กรอกเลขประจำตัว..." class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition-all text-center text-lg font-bold text-gray-700 bg-gray-50">
+              </div>
+              <div>
+                  <label class="block text-gray-700 font-bold mb-1 text-sm">🔑 รหัสผ่าน</label>
+                  <input type="password" id="login-student-pass" placeholder="กรอกรหัสผ่าน..." class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition-all text-center text-lg font-bold text-gray-700 bg-gray-50">
+                  <p class="text-xs text-gray-400 text-center mt-1">* ค่าเริ่มต้นคือเลขประจำตัว (หากไม่ทราบให้ติดต่อครู)</p>
+              </div>
+            </div>
+            <button id="btn-submit-student" onclick="handleStudentLogin()" class="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold py-3 rounded-lg shadow-lg transform active:scale-95 transition-all opacity-50 cursor-not-allowed mt-2" disabled>
+              เข้าสู่ระบบ
+            </button>
+          </div>
+
+        <!-- Teacher Login Form -->
+        <div id="form-login-teacher" class="hidden flex-1 flex flex-col justify-center space-y-6">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">สำหรับครู</h2>
+                <p class="text-gray-500 text-sm">เข้าสู่ระบบด้วยบัญชี Google</p>
+              </div>
+              
+              <button onclick="handleTeacherLogin()" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 rounded-lg shadow-sm transition-all transform active:scale-95">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6" alt="Google">
+                <span>เข้าสู่ระบบด้วย Google</span>
+              </button>
+        </div>
+        
+        <div id="login-status" class="absolute bottom-2 left-0 w-full text-center text-xs text-gray-400">
+            สถานะเซิร์ฟเวอร์: กำลังเชื่อมต่อ...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN APP ==================== -->
+  <div id="app" class="hidden h-full w-full flex flex-col overflow-hidden">
+   <!-- Toast Container -->
+   <div id="toast-container" class="fixed bottom-4 right-4 z-[200] flex flex-col items-end gap-2 pointer-events-none"></div>
+   
+   <!-- Header -->
+   <header class="bg-white shadow-md z-10 shrink-0">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+     <div class="flex items-center gap-3">
+        <div class="bg-red-100 p-2 rounded-lg text-red-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+        </div>
+        <div>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.18</h1>
+            <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
+        </div>
+     </div>
+     <button onclick="handleLogout()" class="text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+        ออกจากระบบ
+     </button>
+    </div>
+   </header>
+   
+   <!-- Tab Navigation -->
+   <div class="bg-white border-b border-gray-200 shadow-sm shrink-0">
+    <div class="max-w-7xl mx-auto px-4 overflow-x-auto no-scrollbar">
+     <nav class="flex space-x-8 min-w-max" id="nav-tabs">
+        <!-- Tabs will be injected here based on role -->
+     </nav>
+    </div>
+   </div>
+
+   <!-- Main Content Area -->
+   <main class="flex-1 overflow-auto bg-gray-50 p-4">
+    <div class="max-w-7xl mx-auto pb-20">
+        
+        <!-- ============ STUDENT DASHBOARD (View Only) ============ -->
+        <div id="content-student-dashboard" class="tab-content hidden space-y-6">
+            
+
+            <div id="student-streak-widget" class="bg-white rounded-xl shadow-sm border border-orange-100 p-4 mb-6 relative overflow-hidden"> 
+                <div class="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-full -mr-10 -mt-10 blur-xl"></div>
+    
+    <div class="flex justify-between items-center relative z-10">
+        <div>
+            <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                📅 เช็คชื่อประจำวัน (Daily Login)
+            </h3>
+            <p class="text-sm text-gray-500 mt-1">
+                ต่อเนื่อง: <span id="streak-count-display" class="font-bold text-orange-600 text-lg">0</span> วัน 
+                <span class="text-xs text-gray-400">(สูงสุด: <span id="streak-max-display">0</span>)</span>
+            </p>
+        </div>
+        <div class="text-right">
+            <button id="btn-claim-streak" onclick="claimDailyStreak()" class="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg shadow-orange-200 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                🎁 รับแต้ม
+            </button>
+            <div id="streak-timer" class="text-xs text-gray-400 mt-1 hidden">พรุ่งนี้มาใหม่นะ</div>
+        </div>
+    </div>
+    
+    <div class="mt-4 pt-4 border-t border-orange-50">
+        <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div id="streak-progress-bar" class="h-full bg-orange-500 transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <p id="next-reward-hint" class="text-xs text-orange-500 mt-2 text-center font-bold">...</p>
+    </div>
+    </div>
+            <!-- Profile Card -->
+            <div id="interest-announce-banner" class="hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white p-4 rounded-xl shadow-lg relative overflow-hidden animate-pulse">
+                <div class="flex items-center gap-3 relative z-10">
+                    <span class="text-3xl">📢</span>
+                    <div>
+                        <h3 class="font-bold text-lg">ประกาศ: อัตราดอกเบี้ยจะเปลี่ยนแปลง!</h3>
+                        <p id="interest-announce-text" class="text-sm text-indigo-100"></p>
+                    </div>
+                </div>
+                <div class="absolute -right-4 -bottom-4 text-white/10 text-9xl font-bold">%</div>
+            </div>
+
+            
+            <div class="bg-white rounded-2xl shadow-sm p-6 flex flex-col md:flex-row items-center gap-6 border border-gray-100">
+                <div class="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center text-4xl shadow-inner">
+                    🎓
+                </div>
+                <div class="flex-1 text-center md:text-left">
+                    <h2 id="std-dash-name" class="text-2xl font-bold text-gray-800">Loading...</h2>
+                    <p id="std-dash-class" class="text-gray-500">Class Loading...</p>
+                    <div class="mt-4 flex flex-wrap justify-center md:justify-start gap-4">
+                        <div class="bg-blue-50 px-6 py-3 rounded-xl border border-blue-100">
+                            <span class="block text-xs text-blue-600 uppercase font-bold tracking-wider">แต้มคงเหลือ</span>
+                            <span id="std-dash-points" class="text-3xl font-bold text-blue-700">0</span>
+                        </div>
+                         <!-- Bank & Interest Display -->
+                         <div class="bg-green-50 px-6 py-3 rounded-xl border border-green-100 flex flex-col justify-between relative overflow-hidden group">
+                            <div>
+                                <span class="block text-xs text-green-600 uppercase font-bold tracking-wider mb-1">🏦 แต้มในธนาคาร</span>
+                                <div class="flex items-baseline gap-2">
+                                   <span id="std-dash-bank" class="text-3xl font-bold text-green-700">0</span>
+                                   <span class="text-xs text-green-500 font-medium">(ดอกเบี้ยสะสม <span id="std-dash-interest">0</span>)</span>
+                                </div>
+                                <div class="flex gap-8 mt-4 relative z-10 pt-2 border-t border-white/10">
+                                    <button onclick="openStudentBankModal('deposit')" class="flex-1 bg-white/20 hover:bg-white/30 text-green-500 py-1.5 rounded-lg font-bold text-sm transition-all border border-white/10 flex items-center justify-start gap-1 active:scale-95">
+                                        📥 ฝากแต้ม
+                                    </button>
+                                    <button onclick="openStudentBankModal('withdraw')" class="flex-1 bg-white/20 hover:bg-white/30 text-green-500 py-1.5 rounded-lg font-bold text-sm transition-all border border-white/10 flex items-center justify-end gap-1 active:scale-95">
+                                        📤 ถอนแต้ม
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            
+                        
+                            <div class="absolute -right-4 -bottom-4 text-green-200/50 text-6xl select-none pointer-events-none">฿</div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            
+            <div id="std-warning-section" class="mt-6 hidden animate-bounce-in">
+                <div class="bg-yellow-50 rounded-2xl border-2 border-yellow-200 p-5 relative overflow-hidden shadow-sm">
+                    <div class="absolute -right-6 -top-6 text-yellow-100 text-9xl select-none pointer-events-none">⚠️</div>
+                    
+                    <div class="relative z-10 flex flex-col md:flex-row gap-6 items-start">
+                        <div class="flex items-center gap-4 min-w-[200px]">
+                            <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center text-3xl border-2 border-yellow-200 shadow-inner">
+                                👮
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-gray-800 text-lg">ติดสถานะใบเตือน!</h3>
+                                <p class="text-sm text-yellow-800">
+                                    โดนไปแล้ว <span id="std-dash-warning-count" class="font-bold text-red-600 text-xl">0</span> ใบ
+                                </p>
+                                <div id="std-dash-pending-box" class="hidden mt-1 inline-block bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded border border-red-200 font-bold">
+                                    🔒 ถูกอายัด: <span id="std-dash-pending-points">0</span> แต้ม
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex-1 w-full bg-white/60 rounded-xl p-4 border border-yellow-100 backdrop-blur-sm">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                📜 ภารกิจลบล้างโทษ
+                            </h4>
+                            <div id="std-dash-missions" class="space-y-2">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent History -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <span>🕒</span> ประวัติล่าสุด
+                </h3>
+                <div id="std-history-list" class="space-y-3 text-sm">
+                    <!-- History items -->
+                </div>
+            </div>
+        </div>
+        <div id="content-student-guild" class="tab-content hidden h-full flex flex-col space-y-6">
+        </div>
+
+        
+
+        <!-- ============ HOME TAB (Teacher List) ============ -->
+      
+        <div id="content-home" class="tab-content hidden h-full flex flex-col">
+            <div class="mb-6 flex gap-3 flex-wrap shrink-0">
+                <button onclick="showAddStudentModal()" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2">
+                    <span class="text-xl leading-none font-bold">+</span> เพิ่มนักเรียน
+                </button>
+                <button onclick="showImportCSVModal()" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2">
+                     📋 นำเข้า CSV
+                </button>
+                <button onclick="showQuizModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2">
+                    <span>📝</span> ตรวจคำตอบ & แจกแต้ม
+                </button>
+            </div>
+            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-5 py-2 rounded-xl shadow-md flex items-center gap-3 border border-indigo-400">
+                <div class="text-right">
+                    <p class="text-[10px] font-medium opacity-80 uppercase tracking-wider">อัตราดอกเบี้ยปัจจุบัน</p>
+                    <p class="text-2xl font-bold leading-none">
+                        <span id="home-interest-display">1.00</span><span class="text-sm font-normal">%</span> <span class="text-sm font-normal"> ต่อชั่วโมง</span>
+                    </p>
+                </div>
+                <div class="text-3xl opacity-50">📈</div>
+            </div>
+      
+            
+            <div id="bulk-actions" class="hidden fixed top-0 left-0 w-full bg-slate-900/95 backdrop-blur-sm text-white p-3 z-40 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-300 animate-slide-in-top border-b border-slate-700">
+    
+    <div class="flex items-center gap-4 shrink-0">
+        <button onclick="cancelBulkSelection()" class="bg-slate-700 hover:bg-slate-600 text-slate-300 w-8 h-8 rounded-full flex items-center justify-center transition-colors" title="ยกเลิกการเลือก">
+         X   
+        </button>
+        <div class="flex items-center gap-3">
+            <div class="bg-red-600 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-md animate-bounce-short">
+                <span id="selected-count">0</span>
+            </div>
+            <div class="leading-tight">
+                <span class="font-bold text-lg block">นักเรียนที่เลือก</span>
+                <span class="text-xs text-slate-400 font-mono" id="selected-names-preview">...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-wrap justify-center gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
+        
+        <div class="flex gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
+            <button onclick="showBulkQuestModal()" class="btn-action bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="ทำภารกิจ">
+                ⚡ <span class="hidden lg:inline">ภารกิจ</span>
+            </button>
+            <button onclick="showBulkPointsModal('add', false)" class="btn-action bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="เพิ่มแต้ม">
+                ➕ <span class="hidden lg:inline">แต้ม</span>
+            </button>
+            <button onclick="showBulkPointsModal('remove', false)" class="btn-action bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="ลดแต้ม">
+                ➖ <span class="hidden lg:inline">แต้ม</span>
+            </button>
+            <div class="flex gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700 ml-2">
+                <button onclick="showBulkWarningModal('add')" class="btn-action bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="แจกใบเตือน">
+                    ⚠️ <span class="hidden lg:inline">เตือน</span>
+                </button>
+                <button onclick="showBulkWarningModal('remove')" class="btn-action bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="ลดใบเตือน">
+                    🛡️ <span class="hidden lg:inline">-เตือน</span>
+                </button>
+            </div>
+            
+        </div>
+
+        <div class="flex gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700" id="single-action-group">
+            <button onclick="handleStickySingleAction('shop')" class="btn-single bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
+                💰 <span class="hidden lg:inline">แลก</span>
+            </button>
+            <button onclick="showBulkGiveRewardModal()" class="btn-action bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="แจกของขวัญ/กล่องสุ่ม">
+                🎁 <span class="hidden lg:inline">แจก</span>
+            </button>
+            <button onclick="handleStickySingleAction('inventory')" class="btn-single bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
+                🎒 <span class="hidden lg:inline">ไอเทม</span>
+            </button>
+            <button onclick="handleStickySingleAction('edit')" class="btn-single bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
+                ✏️ <span class="hidden lg:inline">แก้ไข</span>
+            </button>
+            
+        </div>
+
+        <button onclick="confirmBulkDelete()" class="bg-gray-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center gap-2 ml-2">
+            🗑️
+        </button>
+    </div>
+</div>
+<div class="mb-4 relative shrink-0">
+                <input type="text" id="search-input" placeholder="ค้นหาชื่อ, เลขที่, หรือชั้นเรียน..." class="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-red-500 focus:border-transparent" oninput="filterStudents()">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col">
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm min-w-[1000px]">
+                        <thead class="bg-gray-50 text-gray-700 border-b border-gray-200 text-xs uppercase">
+                            <tr>
+                                <th class="px-4 py-4 text-center w-10">
+                                    <input type="checkbox" id="select-all" onchange="toggleSelectAll()" class="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500">
+                                </th>
+                                <th class="px-2 py-4 text-left font-bold cursor-pointer hover:text-red-600" onclick="sortStudents('student_id')">เลขที่ ↕</th>
+                                <th class="px-2 py-4 text-left font-bold cursor-pointer hover:text-red-600" onclick="sortStudents('full_name')">ชื่อ-สกุล (บัฟ) ↕</th>
+                                <th class="px-2 py-4 text-center font-bold cursor-pointer hover:text-red-600" onclick="sortStudents('points')">แต้มตัว ↕</th>
+                                
+                                <th class="px-2 py-4 text-center font-bold text-indigo-700 cursor-pointer" onclick="sortStudents('bank_points')">ฝาก ↕</th>
+                                <th class="px-2 py-4 text-center font-bold text-green-600">ดอกเบี้ย</th>
+                                <th class="px-2 py-4 text-center font-bold text-emerald-700">รวมถอนได้</th>
+                                <th class="px-2 py-4 text-center font-bold text-yellow-600">ใบเตือน ⚠️</th>
+                                
+                               
+                                <th class="px-2 py-4 text-center font-bold">จัดการ</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="student-list" class="divide-y divide-gray-100">
+                            </tbody>
+                    </table>
+                </div>
+                <div id="pagination-home" class="p-4 border-t bg-gray-50 flex justify-between items-center">
+                    </div>
+            </div>
+        </div>
+
+        <div id="content-punishment" class="tab-content hidden h-full flex flex-col">
+            <div class="mb-4 shrink-0">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    ⚠️ รายชื่อนักเรียนที่ถูกคุมประพฤติ
+                    <span id="punishment-count" class="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full">0</span>
+                </h2>
+                <p class="text-sm text-gray-500">นักเรียนเหล่านี้จะถอนเงินไม่ได้ และแต้มใหม่จะถูกอายัดไว้จนกว่าจะหมดโทษ</p>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-1">
+                <div id="punishment-list" class="divide-y divide-gray-100 overflow-y-auto h-full p-4 space-y-3">
+                    </div>
+            </div>
+        </div>
+                
+        <div id="content-quests" class="tab-content hidden h-full flex flex-col">
+            <div class="mb-6 shrink-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        📜 จัดการภารกิจ (Quests)
+                    </h2>
+                    <div class="flex gap-2">
+                        <button onclick="openManageQuestCategoriesModal()" class="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 px-4 py-2.5 rounded-lg font-bold shadow-sm transition-colors text-sm flex items-center gap-2">
+                            📂 จัดการหมวดหมู่
+                        </button>
+                        <button onclick="showAddQuestModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex items-center gap-2">
+                            <span class="text-xl leading-none">+</span> สร้างภารกิจ
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar" id="quest-category-filters">
+                </div>
+                
+                <div class="mt-3 relative">
+                    <input type="text" id="quest-search-input" placeholder="🔍 ค้นหาชื่อภารกิจ..." class="w-full pl-10 pr-4 py-2.5 border border-indigo-100 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white" oninput="renderQuests()">
+                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col">
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm min-w-[600px]">
+                        <thead class="bg-indigo-50 text-indigo-800 border-b border-indigo-100">
+                            <tr>
+                                <th class="px-6 py-4 text-center w-16">ไอคอน</th>
+                                <th class="px-6 py-4 text-left">ชื่อภารกิจ</th>
+                                <th class="px-6 py-4 text-center">หมวดหมู่</th>
+                                <th class="px-6 py-4 text-center">แต้มรางวัล</th>
+                                <th class="px-6 py-4 text-center w-32">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="quests-list-table" class="divide-y divide-gray-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- GROUP TAB -->
+        <div id="content-groups" class="tab-content hidden h-full flex flex-col space-y-6">
+            <div class="flex justify-between items-center shrink-0">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        👥 จัดกลุ่มเฉพาะกิจ (Custom Groups)
+                    </h2>
+                    <p class="text-sm text-gray-500">สร้างกลุ่มพิเศษสำหรับกิจกรรมต่างๆ (นักเรียนอยู่ได้หลายกลุ่ม)</p>
+                </div>
+                <button onclick="openManageGroupModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg flex items-center gap-2">
+                    <span>+</span> สร้างกลุ่มใหม่
+                </button>
+            </div>
+
+            <div id="custom-groups-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-20 p-1">
+                </div>
+        </div>
+
+        <!-- ============ BANK TAB ============ -->
+        <div id="content-bank" class="tab-content hidden h-full flex flex-col">
+            <div class="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl shadow-lg p-6 text-white mb-6 shrink-0">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1">🏦 ธนาคารแต้ม</h2>
+                        <p class="text-emerald-100">ฝากแต้มพร้อมรับดอกเบี้ย (ครูเป็นผู้ทำรายการ)</p>
+                    </div>
+                    <div class="text-right bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                        <p class="text-xs text-emerald-100">อัตราดอกเบี้ย</p>
+                        <p id="interest-rate-display" class="text-3xl font-bold">1.00%</p>
+                        <p class="text-xs text-emerald-100">ต่อชั่วโมง</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-4 relative shrink-0">
+                <input type="text" id="bank-search-input" placeholder="ค้นหา เลขที่, ชื่อ, ชั้นเรียน..." class="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" oninput="renderBankList()">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col">
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm min-w-[800px]">
+                        <thead class="bg-emerald-50 text-emerald-800 border-b border-emerald-100">
+                            <tr>
+                                <th class="px-4 py-5 text-left cursor-pointer hover:bg-emerald-100" onclick="sortBank('student_id')">เลขที่ ↕</th>
+                                <th class="px-4 py-5 text-left cursor-pointer hover:bg-emerald-100" onclick="sortBank('full_name')">นักเรียน ↕</th>
+                                <th class="px-4 py-5 text-left cursor-pointer hover:bg-emerald-100" onclick="sortBank('class_name')">ชั้น ↕</th>
+                                <th class="px-4 py-5 text-center cursor-pointer hover:bg-emerald-100" onclick="sortBank('points')">แต้มในมือ ↕</th>
+                                <th class="px-4 py-5 text-center cursor-pointer hover:bg-emerald-100" onclick="sortBank('bank_points')">แต้มฝาก ↕</th>
+                                <th class="px-4 py-5 text-center">ดอกเบี้ยสะสม</th>
+                                <th class="px-4 py-5 text-center">รวมถอนได้</th>
+                                <th class="px-4 py-5 text-center">ธุรกรรม</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bank-student-list" class="divide-y divide-gray-100">
+                            <!-- JS Generated -->
+                        </tbody>
+                    </table>
+                </div>
+                 <!-- Pagination Control -->
+                <div id="pagination-bank" class="p-4 border-t bg-gray-50 flex justify-between items-center"></div>
+            </div>
+        </div>
+
+        
+
+        <!-- ============ REWARDS TAB (UPDATED) ============ -->
+        <div id="content-rewards" class="tab-content hidden h-full flex flex-col">
+            <!-- Teacher Controls -->
+            <div id="teacher-reward-controls" class="flex gap-2">
+                <button onclick="showAddRewardModal()" class="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2">
+                    <span class="text-xl leading-none">+</span> เพิ่มของรางวัล
+                </button>
+                <button onclick="openManageRewardCategoriesModal()" class="bg-white border border-gray-300 text-gray-600 px-4 py-2.5 rounded-lg font-bold shadow-sm hover:bg-gray-50 flex items-center gap-2 ml-2">
+                    📂 หมวดหมู่
+                </button>
+            </div>
+            
+            <!-- Teacher View (Table) -->
+            <div id="rewards-table-container" class="hidden bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col">
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm">
+                        <thead class="bg-amber-50 text-amber-800 border-b border-amber-100">
+                            <tr>
+                                <th class="px-4 py-5 text-center w-24">รูปภาพ</th>
+                                <th class="px-4 py-5 text-left">ชื่อรางวัล</th>
+                                <th class="px-4 py-5 text-center">ใช้แต้ม</th>
+                                <th class="px-4 py-5 text-center">สต็อก</th>
+                                <th class="px-4 py-5 text-center">โควตา/คน</th>
+                                <th class="px-4 py-5 text-center">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rewards-list" class="divide-y divide-gray-100">
+                            <!-- JS Generated Rewards (List View) -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Student View (Grid) -->
+            <div id="rewards-grid-container" class="hidden flex-1 overflow-y-auto p-2">
+                 <div id="rewards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-10">
+                    <!-- JS Generated Rewards (Grid View) -->
+                 </div>
+            </div>
+        </div>
+
+
+<div id="content-report" class="tab-content hidden h-full flex flex-col space-y-6">
+            <div class="flex justify-between items-center shrink-0">
+                <h2 class="text-xl font-bold text-gray-800">📊 รายงานภาพรวมรายห้อง</h2>
+                <button onclick="exportClassReportCSV()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm flex items-center gap-2">
+                    <span>📥</span> Export CSV
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 shrink-0">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <h3 class="font-bold text-gray-700 mb-4 text-center">แต้มรวมแต่ละห้อง</h3>
+                    <canvas id="chart-points"></canvas>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <h3 class="font-bold text-gray-700 mb-4 text-center">จำนวนใบเตือนแต่ละห้อง</h3>
+                    <canvas id="chart-redcards"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 text-gray-700 border-b border-gray-200">
+                            <tr>
+                                <th class="px-6 py-4 text-left">ชั้นเรียน</th>
+                                <th class="px-6 py-4 text-center">จำนวนนักเรียน</th>
+                                <th class="px-6 py-4 text-center">แต้มรวม</th>
+                                <th class="px-6 py-4 text-center">คะแนนเฉลี่ย</th>
+                                <th class="px-6 py-4 text-center text-yellow-600">ใบเตือนรวม</th>
+                            </tr>
+                        </thead>
+                        <tbody id="report-class-list" class="divide-y divide-gray-100">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ HISTORY TAB ============ -->
+        <div id="content-history" class="tab-content hidden h-full flex flex-col">
+            <div class="flex justify-between items-center mb-6 shrink-0">
+                <h2 class="text-xl font-bold text-gray-800">ประวัติการทำรายการ</h2>
+                <div id="teacher-history-controls" class="hidden">
+                    <button onclick="confirmDeleteAllHistory()" class="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-md text-sm font-medium transition-colors">ล้างประวัติทั้งหมด</button>
+                </div>
+            </div>
+            
+            <div class="mb-4 relative shrink-0">
+                <input type="text" id="history-search-input" placeholder="ค้นหาประวัติ..." class="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-transparent" oninput="renderHistory()">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col min-h-[500px] md:min-h-0">
+                <div class="overflow-y-auto max-h-[1000px]">
+                    <table class="w-full text-sm min-w-[600px] md:min-w-full">
+                        <thead class="bg-gray-50 text-gray-700 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th class="px-4 py-5 text-left">เวลา</th>
+                                <th class="px-4 py-5 text-left">ชื่อ</th>
+                                <th class="px-4 py-5 text-left">รายการ</th>
+                                <th class="px-4 py-5 text-center">จำนวน</th>
+                                <th class="px-4 py-5 text-center">ลบ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-list" class="divide-y divide-gray-100">
+                            <!-- JS Generated -->
+                        </tbody>
+                    </table>
+                </div>
+                 <!-- Pagination Control -->
+                <div id="pagination-history" class="p-4 border-t bg-gray-50 flex justify-between items-center"></div>
+            </div>
+        </div>
+
+       
+        
+
+        <!-- ============ SETTINGS TAB (Teacher Only) ============ -->
+        <div id="content-settings" class="tab-content hidden h-full overflow-y-auto">
+            <div class="bg-white rounded-xl shadow-sm p-6 max-w-2xl mx-auto border border-gray-200">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">ตั้งค่าระบบ</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">อัตราดอกเบี้ยธนาคาร (% ต่อชั่วโมง)</label>
+                        <div class="flex gap-4 items-center">
+                            <input type="number" id="new-interest-rate" step="0.01" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg" 
+                                   placeholder="1.00" onkeydown="if(event.key==='Enter') handleInterestRateChange()">
+                            <span class="text-gray-500 text-sm">(กด Enter เพื่อบันทึก)</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">เมื่อเปลี่ยน ดอกเบี้ยสะสมทั้งหมดจะถูกคำนวณและทบเข้าแต้มฝากทันที</p>
+                    </div>
+                    
+                    
+                    <div class="pt-6 border-t border-gray-100 mt-6">
+
+                        <div id="buff-rules-settings" class="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 mt-6 mb-6">
+                            <h2 class="text-xl font-bold text-blue-900 mb-6 flex items-center gap-2">
+                                <span>🛡️ ตั้งค่ากติกาบัฟกิลด์</span>
+                            </h2>
+    
+                            <div id="buff-rules-container" class="space-y-6"></div>
+    
+                            <div class="mt-6 pt-6 border-t border-gray-100">
+                                <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                                    😇 กฎเด็กดี (Good Guild) - ฉบับเข้มข้น
+                                </label>
+                                
+                                <div class="bg-orange-50 p-4 rounded-xl border border-orange-200">
+                                    <div class="flex items-start gap-3">
+                                        <div class="text-2xl mt-1">⚠️</div>
+                                        <div class="flex-1">
+                                            <span class="text-sm font-bold text-orange-800 block mb-1">
+                                                เงื่อนไข: กิลด์ต้อง "ไร้ใบเตือน (ใบเหลือง)" 100%
+                                            </span>
+                                            <p class="text-xs text-orange-700 mb-3 leading-relaxed">
+                                                หากสมาชิกในกิลด์ทุกคน <b>ไม่มีใบเตือนติดตัวเลย</b> จะได้รับส่วนลดพิเศษเพิ่มทันที<br>
+                                                (แต่ถ้ามีใครโดนใบเตือนแม้แต่คนเดียว บัฟนี้จะหายไปทั้งกิลด์!)
+                                            </p>
+                                            
+                                            <div class="flex items-center gap-3 bg-white p-2 rounded-lg border border-orange-100 w-fit">
+                                                <span class="text-sm font-bold text-gray-600">รับส่วนลดเพิ่ม:</span>
+                                                <input type="number" id="rule-good-discount" class="border border-orange-300 rounded-md w-20 px-2 py-1 text-center font-bold text-orange-600 outline-none focus:ring-2 focus:ring-orange-200" placeholder="0"> 
+                                                <span class="font-bold text-orange-600">%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+    
+                            <button onclick="saveBuffRulesConfig()" class="mt-8 w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-all">
+                                💾 บันทึกกติกาใหม่ทั้งหมด
+                            </button>
+                        </div>
+
+                        <h3 class="font-bold text-gray-800 mb-2">สำรองข้อมูลระบบ (Backup)</h3>
+                        <p class="text-xs text-gray-500 mb-4">ดาวน์โหลดข้อมูลทั้งหมด (นักเรียน, ประวัติ, รางวัล) เก็บไว้เป็นไฟล์ .json ในคอมพิวเตอร์ เพื่อป้องกันข้อมูลสูญหาย</p>
+                        
+                        <button onclick="exportSystemData()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
+                            <span class="text-xl">💾</span> ดาวน์โหลดไฟล์สำรองข้อมูล (Backup)
+                        </button>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <h4 class="font-bold text-gray-800 mb-2 text-sm">กู้คืนข้อมูล (Restore)</h4>
+                        <p class="text-xs text-red-500 mb-3">⚠️ คำเตือน: การกู้คืนจะ "ทับ" ข้อมูลเดิมที่มีอยู่ในระบบ ถ้า ID ตรงกัน</p>
+                        
+                        <input type="file" id="restore-file-input" accept=".json" class="hidden" onchange="handleRestoreFile(this)">
+                        
+                        <button onclick="document.getElementById('restore-file-input').click()" class="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm text-sm">
+                            <span class="text-lg">📂</span> เลือกไฟล์เพื่อกู้คืนข้อมูล
+                        </button>
+                    </div>
+
+                    
+
+    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mt-6">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">🛡️ ตั้งค่าระบบกิลด์</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">จำกัดสมาชิกสูงสุดต่อกิลด์ (คน)</label>
+            <input type="number" id="config-max-guild-members" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="เช่น 10 (ใส่ 0 คือไม่จำกัด)">
+            <p class="text-xs text-gray-500 mt-1">ใส่ 0 หากไม่ต้องการจำกัดจำนวน</p>
+        </div>
+        
+    </div>
+    <div class="mt-4 flex justify-end">
+        <button onclick="saveGuildConfig()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold">บันทึกตั้งค่ากิลด์</button>
+    </div>
+</div>
+
+<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mt-6">
+    <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        ⚙️ ตั้งค่าระบบเช็คชื่อ (Streak Config)
+    </h3>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <label class="block text-sm font-bold text-gray-700 mb-2">💰 แต้มเช็คชื่อพื้นฐาน (ต่อวัน)</label>
+            <input type="number" id="conf-streak-base" class="w-full border rounded-lg px-3 py-2 text-center font-bold text-green-600" value="10">
+        </div>
+
+        <div class="bg-orange-50 p-4 rounded-xl border border-orange-200 md:col-span-2">
+            <label class="block text-sm font-bold text-orange-800 mb-3">🏆 รางวัลความต่อเนื่อง (Streak Bonus)</label>
+            <div class="space-y-2">
+                <div class="grid grid-cols-12 gap-2 items-center text-sm">
+                        <div class="col-span-1 font-bold text-gray-500 text-center">#1</div>
+                        <div class="col-span-4 flex items-center gap-2">ครบ <input type="number" id="conf-streak-d1" class="w-16 border rounded px-1 text-center" value="7"> วัน</div>
+                        <div class="col-span-7 flex items-center gap-2">รับเพิ่ม <input type="number" id="conf-streak-p1" class="w-16 border rounded px-1 text-center font-bold text-indigo-600" value="100"> แต้ม</div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center text-sm">
+                        <div class="col-span-1 font-bold text-gray-500 text-center">#2</div>
+                        <div class="col-span-4 flex items-center gap-2">ครบ <input type="number" id="conf-streak-d2" class="w-16 border rounded px-1 text-center" value="14"> วัน</div>
+                        <div class="col-span-7 flex items-center gap-2">รับเพิ่ม <input type="number" id="conf-streak-p2" class="w-16 border rounded px-1 text-center font-bold text-indigo-600" value="300"> แต้ม</div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center text-sm">
+                        <div class="col-span-1 font-bold text-gray-500 text-center">#3</div>
+                        <div class="col-span-4 flex items-center gap-2">ครบ <input type="number" id="conf-streak-d3" class="w-16 border rounded px-1 text-center" value="21"> วัน</div>
+                        <div class="col-span-7 flex items-center gap-2">รับเพิ่ม <input type="number" id="conf-streak-p3" class="w-16 border rounded px-1 text-center font-bold text-indigo-600" value="500"> แต้ม</div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center text-sm">
+                        <div class="col-span-1 font-bold text-gray-500 text-center">#4</div>
+                        <div class="col-span-4 flex items-center gap-2">ครบ <input type="number" id="conf-streak-d4" class="w-16 border rounded px-1 text-center" value="30"> วัน</div>
+                        <div class="col-span-7 flex items-center gap-2">รับเพิ่ม <input type="number" id="conf-streak-p4" class="w-16 border rounded px-1 text-center font-bold text-indigo-600" value="1000"> แต้ม</div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center text-sm">
+                        <div class="col-span-1 font-bold text-gray-500 text-center">#5</div>
+                        <div class="col-span-4 flex items-center gap-2">ครบ <input type="number" id="conf-streak-d5" class="w-16 border rounded px-1 text-center" value="45"> วัน</div>
+                        <div class="col-span-7 flex items-center gap-2">รับเพิ่ม <input type="number" id="conf-streak-p5" class="w-16 border rounded px-1 text-center font-bold text-indigo-600" value="3000"> แต้ม</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-4 flex justify-end">
+        <button onclick="saveStreakConfig()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold shadow-md transition-all">
+            💾 บันทึกตั้งค่า
+        </button>
+    </div>
+</div>
+
+
+                </div> 
+            </div>
+        </div>
+<!-- GUILD TAB-->
+<div id="content-guilds" class="tab-content hidden h-full flex flex-col space-y-6">
+    <div class="flex justify-between items-center shrink-0">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                🏰 ระบบกิลด์ (Guild War)
+            </h2>
+            <p class="text-sm text-gray-500">รวมพลังสามัคคี แข่งขันเก็บแต้มเป็นทีม!</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="calculateAndApplyAutoBuffs()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold shadow-md text-sm">
+                🔄 รีเฟรชบัฟ
+            </button>
+            <button onclick="showCreateGuildModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex items-center gap-2">
+                <span>🛡️</span> สร้างกิลด์ใหม่
+            </button>
+        </div>
+    </div>
+
+    <div id="guild-leaderboard" class="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
+    </div>
+
+    <div class="mb-2 relative shrink-0">
+        <input type="text" id="guild-search-input" placeholder="ค้นหาชื่อกิลด์ หรือ สมาชิกในกิลด์..." class="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent" oninput="renderGuildsDashboard()">
+        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col">
+        <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+            <h3 class="font-bold text-gray-700">รายชื่อกิลด์ทั้งหมด</h3>
+            <span class="text-xs text-gray-400">คลิกที่กิลด์เพื่อจัดการสมาชิก</span>
+        </div>
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-sm min-w-[600px]">
+                <thead class="bg-white text-gray-600 border-b">
+                    <tr>
+                        <th class="px-6 py-4 text-center w-16">อันดับ</th>
+                        <th class="px-6 py-4 text-left">ชื่อกิลด์</th>
+                        <th class="px-6 py-4 text-center">สมาชิก</th>
+                        <th class="px-6 py-4 text-center">แต้มรวม</th>
+                        <th class="px-6 py-4 text-center">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody id="guild-list-body" class="divide-y divide-gray-100">
+                </tbody>
+            </table>
+        </div>
+        <div id="pagination-guilds" class="p-4 border-t bg-gray-50 flex justify-between items-center"></div>
+    </div>
+</div>
+
+<div id="create-guild-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">สร้างกิลด์ใหม่</h2>
+        <form onsubmit="handleCreateGuild(event)" class="space-y-4">
+            <div>
+                <label class="text-xs text-gray-500">ชื่อกิลด์</label>
+                <input type="text" id="new-guild-name" required placeholder="เช่น ภาคีฟีนิกซ์" class="w-full px-4 py-2 border rounded-lg">
+            </div>
+            <div>
+                <label class="text-xs text-gray-500">สัญลักษณ์ (Emoji)</label>
+                <input type="text" id="new-guild-icon" placeholder="🦁" class="w-full px-4 py-2 border rounded-lg text-center text-2xl">
+            </div>
+            <div>
+                <label class="text-xs text-gray-500">กฎระเบียบกิลด์</label>
+                <textarea id="new-guild-rules" rows="3" placeholder="เช่น ต้องช่วยกันทำภารกิจ..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div class="col-span-2 text-xs font-bold text-gray-500 mb-1">📝 สัญญากิลด์ (Contract)</div>
+                
+                <div>
+                    <label class="text-[10px] text-gray-400">ห้ามออกภายใน (ชม.)</label>
+                    <input type="number" id="new-guild-cooldown" class="w-full px-2 py-1 border rounded text-sm text-center" placeholder="0 = ไม่ล็อค">
+                </div>
+                <div>
+                    <label class="text-[10px] text-gray-400">ค่าปรับถ้าออก/ย้ายก่อน(แต้ม)</label>
+                    <input type="number" id="new-guild-fee" class="w-full px-2 py-1 border rounded text-sm text-center" placeholder="0 = ฟรี">
+                </div>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button type="button" onclick="document.getElementById('create-guild-modal').classList.add('hidden')" class="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg">ยกเลิก</button>
+                <button type="submit" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold">สร้างเลย</button>
+            </div>
+            
+        </form>
+    </div>
+</div>
+
+<div id="manage-guild-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-0 sm:p-4">
+    <div class="bg-white sm:rounded-2xl shadow-xl max-w-6xl w-full mx-auto flex flex-col h-full md:h-[95vh] overflow-hidden relative">
+        
+        <div class="shrink-0 bg-white border-b border-gray-200 z-24 shadow-sm relative">
+            
+            <div class="px-5 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div class="flex items-center gap-3 flex-1">
+                    <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Guild Editor</span>
+                    <input type="hidden" id="manage-guild-id">
+                </div>
+                <button onclick="document.getElementById('manage-guild-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors text-xl font-bold">
+                    &times;
+                </button>
+            </div>
+
+            <div class="p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 max-h-[40vh] overflow-y-auto lg:overflow-visible">
+                
+                <div class="lg:col-span-6 space-y-3">
+                    <div class="flex gap-2">
+                        <div class="relative group">
+                            <input type="text" id="edit-guild-icon" class="w-16 h-full text-center text-3xl border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-gray-50 group-hover:bg-white transition-colors" placeholder="🛡️">
+                            <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 text-[9px] bg-gray-800 text-white px-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">ไอคอน</span>
+                        </div>
+                        <div class="flex-1">
+                            <input type="text" id="edit-guild-name" class="w-full h-full px-4 text-lg font-bold text-gray-800 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors" placeholder="ระบุชื่อกิลด์...">
+                        </div>
+                    </div>
+                    
+                    <div class="relative">
+                        <textarea id="edit-guild-rules" rows="2" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white resize-none" placeholder="📜 ระบุกฎระเบียบกิลด์ที่นี่..."></textarea>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-6 grid grid-cols-2 gap-3">
+                    
+                    <div class="col-span-1 bg-red-50/50 p-3 rounded-xl border border-red-100">
+                        <h4 class="text-xs font-bold text-red-800 mb-2 flex items-center gap-1">
+                            📝 สัญญากิลด์ (Contract)
+                        </h4>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-end gap-2">
+                                <span class="text-[10px] text-red-400 w-16">สัญญา</span>
+                                <input type="number" id="edit-guild-cooldown" class="w-20 h-8 px-1 border border-red-200 rounded text-center text-sm font-bold text-red-600 focus:border-red-500" placeholder="0">
+                                <span class="text-[10px] text-red-400 w-6">ชม.</span>
+                            </div>
+                            <div class="flex items-center justify-end gap-2">
+                                <span class="text-[10px] text-red-400 w-16">ค่าปรับออก</span>
+                                <input type="number" id="edit-guild-fee" class="w-20 h-8 px-1 border border-red-200 rounded text-center text-sm font-bold text-red-600 focus:border-red-500" placeholder="0">
+                                <span class="text-[10px] text-red-400 w-6">แต้ม</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-span-1 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+                        <h4 class="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1">
+                            ✨ พลังแฝง (Guild Buffs)
+                        </h4>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-end gap-2">
+                                <span class="text-[10px] text-amber-500 w-16">ดอกเบี้ย</span>
+                                <input type="number" id="guild-buff-interest" step="0.01" class="w-20 h-8 px-2 border border-amber-200 rounded text-center text-sm font-bold text-green-600 focus:border-amber-500" placeholder="0.0">
+                                <span class="text-[10px] text-amber-500 w-6">%</span>
+                            </div>
+                            <div class="flex items-center justify-end gap-2">
+                                <span class="text-[10px] text-amber-500 w-16">ส่วนลดของ</span>
+                                <input type="number" id="guild-buff-discount" class="w-20 h-8 px-2 border border-amber-200 rounded text-center text-sm font-bold text-red-500 focus:border-amber-500" placeholder="0">
+                                <span class="text-[10px] text-amber-500 w-6">%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="px-5 pb-3">
+                <div class="relative">
+                    <input type="text" id="search-student-guild" placeholder="🔍 ค้นหาชื่อนักเรียนเพื่อเพิ่มเข้ากิลด์..." class="w-full pl-10 pr-4 py-2.5 bg-gray-100 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm font-bold" oninput="renderGuildMembersSelect()">
+                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <div class="flex justify-between items-end mt-1 px-1">
+                     <p class="text-[10px] text-gray-400">* เลือกรายชื่อด้านล่างเพื่อเพิ่ม/ลบสมาชิก</p>
+                     <p class="text-[10px] text-indigo-500 font-bold cursor-pointer hover:underline" onclick="toggleGuildSelection('all')">เลือกทั้งหมด</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 bg-gray-50/30 custom-scrollbar">
+            <div id="guild-member-selection" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 pb-4">
+                </div>
+        </div>
+        
+        <div class="p-4 bg-white border-t border-gray-100 flex justify-between items-center z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+             <button onclick="if(confirm('ยืนยันลบกิลด์นี้?')) deleteGuild()" class="text-red-400 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
+                🗑️ ลบกิลด์
+             </button>
+             <button onclick="saveGuildData()" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-10 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2">
+                <span>💾</span> บันทึกข้อมูล
+             </button>
+        </div>
+        
+    </div>
+</div>
+
+
+    </div>
+   </main>
+
+   <!-- ==================== MODALS ==================== -->
+   
+   <!-- Generic Confirmation Modal -->
+   <div id="confirmation-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[100] p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-100 transition-all">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl text-red-600">⚠️</div>
+                <h3 class="text-xl font-bold text-gray-900" id="confirm-modal-title">ยืนยันการทำรายการ</h3>
+                <p class="text-gray-500 text-sm mt-2" id="confirm-modal-message">คุณแน่ใจหรือไม่?</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors">ยกเลิก</button>
+                <button onclick="executeConfirmAction()" class="flex-1 py-3 text-white bg-red-600 hover:bg-red-700 rounded-xl font-bold shadow-md transition-colors">ยืนยัน</button>
+            </div>
+        </div>
+   </div>
+   
+   <!-- Bank Action Modal -->
+   <div id="bank-action-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <h3 id="bank-modal-title" class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <span>🏦</span> ทำรายการธนาคาร
+        </h3>
+        <input type="hidden" id="bank-student-id">
+        
+        <div class="bg-gray-50 rounded-xl p-3 mb-4 border border-gray-200">
+            <div class="flex justify-between items-center mb-2 border-b border-gray-200 pb-2">
+                <span class="text-xs text-gray-500 font-bold">บัญชีของ</span>
+                <span id="bank-student-name" class="font-bold text-indigo-700 text-lg">-</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white p-2 rounded-lg border border-blue-100 text-center shadow-sm">
+                    <span class="text-[10px] text-blue-500 uppercase font-bold block mb-1">💵 แต้มในมือ</span>
+                    <span id="bank-wallet-display" class="text-xl font-bold text-blue-700 block">0</span>
+                </div>
+                
+                <div class="bg-white p-2 rounded-lg border border-green-100 text-center shadow-sm">
+                    <span class="text-[10px] text-green-600 uppercase font-bold block mb-1">🏦 ในธนาคาร (รวม)</span>
+                    <span id="bank-balance-display" class="text-xl font-bold text-green-700 block">0</span>
+                </div>
+            </div>
+        </div>
+
+        <input type="number" id="bank-amount" class="w-full px-4 py-3 border rounded-lg text-lg font-bold text-center mb-2" placeholder="ระบุจำนวนแต้ม">
+        <input type="text" id="bank-note" class="w-full px-4 py-2 border rounded-lg text-sm mb-4 bg-gray-50" placeholder="📝 บันทึกช่วยจำ (Optional)">
+        
+        <div class="grid grid-cols-2 gap-3 mb-2">
+            <button onclick="document.getElementById('bank-transaction-type').value='deposit'; handleBankTransaction()" class="bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 py-2 rounded-lg font-bold text-sm">
+                ฝาก (ตามยอด)
+            </button>
+            <button onclick="document.getElementById('bank-transaction-type').value='withdraw'; handleBankTransaction()" class="bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 py-2 rounded-lg font-bold text-sm">
+                ถอน (ตามยอด)
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-3">
+            <button onclick="handleBankAll('deposit')" class="bg-green-600 text-white hover:bg-green-700 py-2 rounded-lg font-bold text-sm shadow-md flex items-center justify-center gap-1">
+                📥 ฝากทั้งหมด
+            </button>
+            <button onclick="handleBankAll('withdraw')" class="bg-amber-500 text-white hover:bg-amber-600 py-2 rounded-lg font-bold text-sm shadow-md flex items-center justify-center gap-1">
+                📤 ถอนทั้งหมด
+            </button>
+        </div>
+        
+        <input type="hidden" id="bank-transaction-type" value="deposit">
+
+        <button onclick="hideBankModal()" class="w-full text-gray-400 text-sm hover:text-gray-600 mt-2">ยกเลิก</button>
+    </div>
+</div>
+
+   <!-- Teacher Student Redeem Modal (Shop) -->
+   <div id="student-redeem-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-4xl w-full p-6 h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900">เลือกของรางวัล</h3>
+                    <p id="shop-student-name" class="text-indigo-600 font-bold"></p>
+                </div>
+                <button onclick="document.getElementById('student-redeem-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div id="shop-grid" class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-2">
+                <!-- Rewards will be listed here -->
+            </div>
+        </div>
+   </div>
+
+   <!-- Edit Student Modal -->
+   <div id="edit-student-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+     <h2 class="text-xl font-bold text-gray-800 mb-4">แก้ไขข้อมูลนักเรียน</h2>
+     <form onsubmit="handleEditStudentSubmit(event)" class="space-y-4">
+       <input type="hidden" id="edit-std-doc-id">
+       <div>
+         <label class="text-xs text-gray-500">เลขประจำตัว</label>
+         <input type="text" id="edit-std-id" required class="w-full px-4 py-2 border rounded-lg bg-gray-50">
+       </div>
+       <div>
+         <label class="text-xs text-gray-500">ชื่อ-นามสกุล</label>
+         <input type="text" id="edit-std-name" required class="w-full px-4 py-2 border rounded-lg">
+       </div>
+       <div>
+         <label class="text-xs text-gray-500">ชั้นเรียน</label>
+         <input type="text" id="edit-std-class" required class="w-full px-4 py-2 border rounded-lg">
+       </div>
+       <div>
+        <label class="text-xs text-gray-500">🔑 เปลี่ยนรหัสผ่านใหม่</label>
+        <input type="text" id="edit-std-pass" placeholder="ระบุรหัสใหม่ (เว้นว่างถ้าไม่เปลี่ยน)" class="w-full px-4 py-2 border rounded-lg bg-yellow-50 focus:bg-white transition-colors">
+      </div>
+       <div class="flex gap-3 pt-2">
+         <button type="button" onclick="document.getElementById('edit-student-modal').classList.add('hidden')" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg">ยกเลิก</button>
+         <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg">บันทึก</button>
+       </div>
+     </form>
+    </div>
+   </div>
+
+   <!-- Add Student Modal -->
+   <div id="add-student-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+     <h2 class="text-xl font-bold text-gray-800 mb-4">เพิ่มนักเรียนใหม่</h2>
+     <form onsubmit="handleAddStudent(event)" class="space-y-4">
+       <div>
+         <label class="text-xs text-gray-500">เลขประจำตัวนักเรียน</label>
+         <input type="text" id="add-std-id" required placeholder="เช่น 1001" class="w-full px-4 py-2 border rounded-lg">
+       </div>
+       <div>
+         <label class="text-xs text-gray-500">ชื่อ-นามสกุล</label>
+         <input type="text" id="add-std-name" required placeholder="ระบุชื่อนักเรียน" class="w-full px-4 py-2 border rounded-lg">
+       </div>
+       <div>
+         <label class="text-xs text-gray-500">ชั้นเรียน</label>
+         <input type="text" id="add-std-class" required placeholder="เช่น ป.1/1" class="w-full px-4 py-2 border rounded-lg">
+       </div>
+       <div>
+        <label class="text-xs text-gray-500">🔑 รหัสผ่าน (สำหรับเข้าสู่ระบบ)</label>
+        <input type="text" id="add-std-pass" placeholder="เว้นว่าง = ใช้เลขประจำตัวเป็นรหัส" class="w-full px-4 py-2 border rounded-lg bg-yellow-50 focus:bg-white transition-colors">
+      </div>
+       <div class="flex gap-3 pt-2">
+         <button type="button" onclick="document.getElementById('add-student-modal').classList.add('hidden')" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg">ยกเลิก</button>
+         <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg shadow-md">บันทึกข้อมูล</button>
+       </div>
+     </form>
+    </div>
+   </div>
+   
+   <!-- CSV Import Modal (New) -->
+   <div id="import-csv-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 flex flex-col h-[80vh]">
+     <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-gray-800">นำเข้าข้อมูล CSV</h2>
+        <button onclick="document.getElementById('import-csv-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+     </div>
+     <div class="mb-2 text-sm text-gray-600">
+        <p>ก๊อปปี้ข้อมูลจาก Excel มาวางที่นี่ (ลำดับคอลัมน์: <b>เลขประจำตัว, ชื่อ-สกุล, ชั้น, แต้ม, ใบแดง</b>)</p>
+        <p class="text-xs text-gray-400 mt-1">* สามารถใช้ Header ได้ (ระบบจะข้ามบรรทัดแรกถ้าไม่ใช่ตัวเลข)</p>
+     </div>
+     <textarea id="import-csv-text" class="flex-1 w-full p-4 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-green-500 outline-none resize-none" placeholder="1001    ด.ช.รักเรียน    ป.1/1    50    0..."></textarea>
+     <div class="flex gap-3 pt-4">
+         <button type="button" onclick="document.getElementById('import-csv-modal').classList.add('hidden')" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium">ยกเลิก</button>
+         <button type="button" onclick="handleCSVImport()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-md">นำเข้าข้อมูล</button>
+     </div>
+    </div>
+   </div>
+
+   <!-- Point Management Modal -->
+   <div id="points-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4 pt-24">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+     <h2 id="points-modal-title" class="text-xl font-bold text-gray-800 mb-4">จัดการแต้ม</h2>
+     <div id="selected-students-preview" class="mb-4 text-sm text-gray-500 max-h-20 overflow-y-auto"></div>
+     <form onsubmit="handlePointsSubmit(event)" class="space-y-4">
+       <div class="flex flex-col gap-1">
+           <label id="points-input-label" class="text-sm text-gray-500">จำนวนแต้ม</label>
+           <input type="number" id="points-amount" required min="1" placeholder="ระบุจำนวน" class="w-full px-4 py-2 border rounded-lg text-lg font-bold">
+       </div>
+       <textarea id="points-reason" placeholder="เหตุผล (ไม่บังคับ)" class="w-full px-4 py-2 border rounded-lg" rows="2"></textarea>
+       <div class="flex gap-3 pt-2">
+         <button type="button" onclick="hidePointsModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg">ยกเลิก</button>
+         <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg">ยืนยัน</button>
+       </div>
+     </form>
+    </div>
+   </div>
+   
+    
+   
+
+    <!-- Add Reward Modal -->
+    <div id="add-reward-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 shrink-0">เพิ่มของรางวัล / สร้างกล่องสุ่ม</h2>
+            
+            
+
+                <form onsubmit="handleAddReward(event)" class="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-gray-500">ชื่อของรางวัล/กล่อง</label>
+                        <input type="text" id="add-reward-name" required placeholder="เช่น กล่องสุ่มเทพเจ้า" class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">หมวดหมู่</label>
+                        <select id="add-reward-category" class="w-full px-4 py-2 border rounded-lg bg-white"></select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">ราคา (แต้ม)</label>
+                        <input type="number" id="add-reward-points" required class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">URL รูปภาพ</label>
+                    <input type="text" id="add-reward-img" placeholder="https://..." class="w-full px-4 py-2 border rounded-lg">
+                </div>
+                
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="text-xs text-gray-500 block mb-1">ประเภท</label>
+                    <select id="add-reward-type" class="w-full px-4 py-2 border rounded-lg bg-white" onchange="toggleRewardTypeInputs()">
+                        <option value="general">🎁 ของรางวัลทั่วไป (แลกแล้วจบ)</option>
+                        <option value="gacha_custom">🎲 กล่องสุ่ม (Custom Gacha) ✨</option>
+                    </select>
+                </div>
+
+                <div id="gacha-builder-container" class="hidden bg-amber-50 p-4 rounded-lg border border-amber-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-bold text-amber-800">จัดการของในกล่องสุ่ม</h3>
+                        <span class="text-xs text-amber-600">รวมโอกาส: <span id="gacha-total-chance" class="font-bold">0</span>%</span>
+                    </div>
+                    <div id="gacha-slots-list" class="space-y-2 mb-3"></div>
+                    <button type="button" onclick="addGachaSlot()" class="w-full py-2 border-2 border-dashed border-amber-300 text-amber-600 rounded-lg hover:bg-amber-100 font-bold text-sm">+ เพิ่มความเป็นไปได้ (Slot)</button>
+                </div>
+
+                
+                    <div class="bg-red-50 p-3 rounded-lg border border-red-100">
+                        <label class="text-xs font-bold text-red-800 block mb-2">🚫 เงื่อนไขการยกเว้นส่วนลด (Option)</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="add-reward-no-guild" class="rounded text-red-600 focus:ring-red-500">
+                                <span class="text-xs text-gray-700">ห้ามใช้บัฟกิลด์</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="add-reward-no-personal" class="rounded text-red-600 focus:ring-red-500">
+                                <span class="text-xs text-gray-700">ห้ามใช้บัฟส่วนตัว</span>
+                            </label>
+                        </div>
+                    </div>
+                
+                    
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-gray-500">จำนวนสต็อก</label>
+                        <input type="number" id="add-reward-stock" class="w-full px-4 py-2 border rounded-lg">
+                        <div class="flex items-center mt-1">
+                            <input type="checkbox" id="add-reward-unlimited" class="mr-2" onchange="toggleStockInput('add')">
+                            <label for="add-reward-unlimited" class="text-[10px] text-gray-600">ไม่จำกัด</label>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <input type="checkbox" id="add-reward-active" checked class="w-5 h-5 text-green-600 rounded focus:ring-green-500 cursor-pointer">
+                        <label for="add-reward-active" class="text-sm font-bold text-gray-700 cursor-pointer select-none">✅ เปิดขายทันที</label>
+                    </div>
+                    <div>
+                      <label class="text-xs text-gray-500">โควตา/คน</label>
+                        <input type="number" id="add-reward-quota" class="w-full px-4 py-2 border rounded-lg">
+                        <div class="flex items-center mt-1">
+                            <input type="checkbox" id="add-reward-quota-unlimited" class="mr-2" onchange="toggleQuotaInput('add')">
+                            <label for="add-reward-quota-unlimited" class="text-[10px] text-gray-600">ไม่จำกัด (0)</label>
+                    </div>
+                </div>
+              </div>
+                <div class="flex gap-3 pt-4 sticky bottom-0 bg-white border-t mt-4">
+                    <button type="button" onclick="document.getElementById('add-reward-modal').classList.add('hidden')" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg">ยกเลิก</button>
+                    <button type="submit" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg shadow-md">บันทึก</button>
+                </div>
+            </form>
+                
+                
+        </div>
+    </div>
+    <div id="edit-reward-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 shrink-0">แก้ไขของรางวัล / กล่องสุ่ม</h2>
+            
+            <form onsubmit="handleEditRewardSubmit(event)" class="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                <input type="hidden" id="edit-reward-id">
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-gray-500">ชื่อของรางวัล/กล่อง</label>
+                        <input type="text" id="edit-reward-name" required class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">หมวดหมู่</label>
+                        <select id="edit-reward-category" class="w-full px-4 py-2 border rounded-lg bg-white"></select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">ราคา (แต้ม)</label>
+                        <input type="number" id="edit-reward-points" required class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">URL รูปภาพ</label>
+                    <input type="text" id="edit-reward-img" placeholder="https://..." class="w-full px-4 py-2 border rounded-lg">
+                </div>
+
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="text-xs text-gray-500 block mb-1">ประเภท</label>
+                    <select id="edit-reward-type" class="w-full px-4 py-2 border rounded-lg bg-white" onchange="toggleEditRewardTypeInputs()">
+                        <option value="general">🎁 ของรางวัลทั่วไป (แลกแล้วจบ)</option>
+                        <option value="gacha_custom">🎲 กล่องสุ่ม (Custom Gacha) ✨</option>
+                    </select>
+                </div>
+
+                <div id="edit-gacha-builder-container" class="hidden bg-amber-50 p-4 rounded-lg border border-amber-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-bold text-amber-800">จัดการของในกล่องสุ่ม</h3>
+                        <span class="text-xs text-amber-600">รวมโอกาส: <span id="edit-gacha-total-chance" class="font-bold">0</span>%</span>
+                    </div>
+                    
+                    <div id="edit-gacha-slots-list" class="space-y-2 mb-3"></div>
+
+                    <button type="button" onclick="addEditGachaSlot()" class="w-full py-2 border-2 border-dashed border-amber-300 text-amber-600 rounded-lg hover:bg-amber-100 font-bold text-sm">+ เพิ่มความเป็นไปได้ (Slot)</button>
+                </div>
+
+                <div class="bg-red-50 p-3 rounded-lg border border-red-100">
+                    <label class="text-xs font-bold text-red-800 block mb-2">🚫 เงื่อนไขการยกเว้นส่วนลด</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="edit-reward-no-guild" class="rounded text-red-600 focus:ring-red-500">
+                            <span class="text-xs text-gray-700">ห้ามใช้บัฟกิลด์</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="edit-reward-no-personal" class="rounded text-red-600 focus:ring-red-500">
+                            <span class="text-xs text-gray-700">ห้ามใช้บัฟส่วนตัว</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-gray-500">จำนวนสต็อก</label>
+                        <input type="number" id="edit-reward-stock" class="w-full px-4 py-2 border rounded-lg">
+                        <div class="flex items-center mt-1">
+                            <input type="checkbox" id="edit-reward-unlimited" class="mr-2" onchange="toggleStockInput('edit')">
+                            <label for="edit-reward-unlimited" class="text-[10px] text-gray-600">ไม่จำกัด</label>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <input type="checkbox" id="edit-reward-active" class="w-5 h-5 text-green-600 rounded focus:ring-green-500 cursor-pointer">
+                        <label for="edit-reward-active" class="text-sm font-bold text-gray-700 cursor-pointer select-none">✅ เปิดใช้งาน (แสดงในร้านค้า)</label>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">โควตา/คน</label>
+                        <input type="number" id="edit-reward-quota" class="w-full px-4 py-2 border rounded-lg">
+                        <div class="flex items-center mt-1 mb-2">
+                             <input type="checkbox" id="edit-reward-quota-unlimited" class="mr-2" onchange="toggleQuotaInput('edit')">
+                            <label for="edit-reward-quota-unlimited" class="text-[10px] text-gray-600">ไม่จำกัด (0)</label>
+                        </div>
+
+                        <button type="button" onclick="resetSingleRewardQuota()" class="w-full text-xs bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 py-2 rounded-lg transition-colors flex items-center justify-center gap-1">
+                           <span>🔄</span> ล้างประวัติการแลก (Reset Quota)
+                        </button>
+                         <p class="text-[9px] text-gray-400 text-center mt-1">* กดเพื่อให้ทุกคนกลับมาแลกของชิ้นนี้ได้ใหม่ (สต็อกไม่เปลี่ยน)</p>
+                    </div>
+                   
+                </div>
+
+                <div class="flex gap-3 pt-4 border-t mt-4 sticky bottom-0 bg-white">
+                    <button type="button" onclick="document.getElementById('edit-reward-modal').classList.add('hidden')" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg">ยกเลิก</button>
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg shadow-md">บันทึกการแก้ไข</button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+
+    <!-- Redeem Confirm Modal -->
+    <div id="redeem-quantity-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 transform scale-100 transition-all">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎁</div>
+                <h3 class="text-xl font-bold text-gray-900" id="redeem-modal-title">แลกของรางวัล</h3>
+                <p class="text-gray-500 text-sm mt-1" id="redeem-modal-subtitle"></p>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2">ระบุจำนวนที่ต้องการ</label>
+                <div class="flex items-center border border-gray-300 rounded-xl overflow-hidden">
+                    <button onclick="adjustRedeemQty(-1)" class="px-4 py-3 bg-gray-50 hover:bg-gray-100 border-r text-gray-600">-</button>
+                    <input type="number" id="redeem-qty" value="0" min="0" class="w-full text-center py-3 outline-none font-bold text-lg" oninput="validateRedeemInput(this)">
+                    <button onclick="adjustRedeemQty(1)" class="px-4 py-3 bg-gray-50 hover:bg-gray-100 border-l text-gray-600">+</button>
+                </div>
+                <div class="flex justify-between items-center mt-3 px-1">
+                    <span class="text-gray-600 text-sm">รวมแต้มที่ต้องใช้:</span>
+                    <span id="redeem-total-points" class="font-bold text-amber-600 text-lg">0</span>
+                </div>
+            </div>
+            
+            <div class="flex gap-3">
+                <button onclick="hideRedeemQuantityModal()" class="flex-1 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors">ยกเลิก</button>
+                <button onclick="confirmRedeemAction()" class="flex-1 py-3 text-white bg-amber-500 hover:bg-amber-600 rounded-xl font-bold shadow-md shadow-amber-200 transition-colors">ยืนยันแลก</button>
+            </div>
+        </div>
+   </div>
+<div id="add-quest-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+     <h2 class="text-xl font-bold text-gray-800 mb-4">📜 สร้างภารกิจใหม่</h2>
+     <form onsubmit="handleAddQuest(event)" class="space-y-4">
+       <div>
+           <label class="text-xs text-gray-500">ชื่อภารกิจ</label>
+           <input type="text" id="add-quest-title" required placeholder="เช่น ส่งการบ้านครบ, จิตอาสา" class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white transition-colors">
+       </div>
+       <div>
+        <label class="text-xs text-gray-500">หมวดหมู่</label>
+        <select id="add-quest-category" class="w-full px-4 py-2 border rounded-lg bg-white">
+            </select>
+    </div>
+       <div class="grid grid-cols-2 gap-4">
+           <div>
+               <label class="text-xs text-gray-500">ไอคอน (Emoji)</label>
+               <input type="text" id="add-quest-icon" placeholder="เช่น 🧹, 📚, ✨" class="w-full px-4 py-2 border rounded-lg text-center">
+           </div>
+           <div>
+               <label class="text-xs text-gray-500">แต้มรางวัล</label>
+               <input type="number" id="add-quest-points" required placeholder="10" class="w-full px-4 py-2 border rounded-lg text-center font-bold text-green-600">
+           </div>
+       </div>
+       <div class="flex gap-3 pt-4">
+         <button type="button" onclick="document.getElementById('add-quest-modal').classList.add('hidden')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg">ยกเลิก</button>
+         <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg shadow-md">สร้างภารกิจ</button>
+       </div>
+
+
+     </form>
+    </div>
+   </div>
+
+   <div id="edit-quest-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+     <h2 class="text-xl font-bold text-gray-800 mb-4">✏️ แก้ไขภารกิจ</h2>
+     <form onsubmit="handleEditQuestSubmit(event)" class="space-y-4">
+       <input type="hidden" id="edit-quest-id">
+       <div>
+           <label class="text-xs text-gray-500">ชื่อภารกิจ</label>
+           <input type="text" id="edit-quest-title" required class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white transition-colors">
+       </div>
+       <div>
+        <label class="text-xs text-gray-500">หมวดหมู่</label>
+        <select id="edit-quest-category" class="w-full px-4 py-2 border rounded-lg bg-white">
+            </select>
+         </div>
+       <div class="grid grid-cols-2 gap-4">
+           <div>
+               <label class="text-xs text-gray-500">ไอคอน (Emoji)</label>
+               <input type="text" id="edit-quest-icon" class="w-full px-4 py-2 border rounded-lg text-center">
+           </div>
+           <div>
+               <label class="text-xs text-gray-500">แต้มรางวัล</label>
+               <input type="number" id="edit-quest-points" required class="w-full px-4 py-2 border rounded-lg text-center font-bold text-blue-600">
+           </div>
+       </div>
+       <div class="flex gap-3 pt-4">
+         <button type="button" onclick="document.getElementById('edit-quest-modal').classList.add('hidden')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg">ยกเลิก</button>
+         <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg shadow-md">บันทึกการแก้ไข</button>
+       </div>
+     </form>
+    </div>
+   </div>
+
+   <div id="manage-quest-cat-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">🏷️ จัดการประเภทภารกิจ</h2>
+        
+        <div class="flex gap-2 mb-4">
+            <input type="text" id="new-quest-cat-input" placeholder="ชื่อประเภทใหม่..." class="flex-1 px-3 py-2 border rounded-lg">
+            <button onclick="addQuestCategory()" class="bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold">+</button>
+        </div>
+
+        <div id="quest-cat-list" class="space-y-2 max-h-60 overflow-y-auto mb-4">
+            </div>
+
+        <button onclick="document.getElementById('manage-quest-cat-modal').classList.add('hidden')" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg">ปิดหน้าต่าง</button>
+    </div>
+   </div>
+
+   <div id="bulk-quest-modal" class="fixed inset-0 modal-backdrop hidden z-50 overflow-y-auto">
+    <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+        <div class="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md p-6">
+            
+             <div class="text-center mb-4">
+                 <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-2 text-2xl">⚡</div>
+                 <h2 class="text-xl font-bold text-gray-800">เลือกภารกิจที่สำเร็จ</h2>
+                 <p class="text-xs text-gray-500">แต้มจะถูกมอบให้นักเรียนที่เลือกทุกคนทันที</p>
+                 <div id="bulk-quest-students-preview" class="text-xs text-indigo-600 bg-indigo-50 p-2 rounded-lg max-h-20 overflow-y-auto border border-indigo-100 mt-2 custom-scrollbar"></div>
+             </div>
+
+             <div class="mb-4 bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center justify-between">
+                <label class="text-sm font-bold text-indigo-800 flex items-center gap-2">
+                    🔢 จำนวนครั้งที่ทำ:
+                </label>
+                <div class="flex items-center bg-white rounded-lg border border-indigo-200 shadow-sm">
+                    <button onclick="adjustBulkQuestQty(-1)" class="w-10 py-1 text-indigo-600 hover:bg-indigo-50 font-bold text-lg rounded-l-lg transition-colors">-</button>
+                    <input type="number" id="bulk-quest-qty" value="1" min="1" class="w-16 text-center font-bold text-indigo-700 outline-none border-x border-indigo-100 py-1" onchange="if(this.value<1)this.value=1">
+                    <button onclick="adjustBulkQuestQty(1)" class="w-10 py-1 text-indigo-600 hover:bg-indigo-50 font-bold text-lg rounded-r-lg transition-colors">+</button>
+                </div>
+             </div>
+             
+             <div class="mb-2 relative">
+                <input type="text" id="bulk-quest-search" placeholder="🔍 ค้นหาภารกิจ..." class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" oninput="renderBulkQuestList()">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+             </div>
+             
+             <div id="bulk-quest-list" class="space-y-2 min-h-[300px] max-h-[400px] overflow-y-auto custom-scrollbar">
+             </div>
+             
+             <div class="pt-4 mt-4 border-t">
+                <button onclick="document.getElementById('bulk-quest-modal').classList.add('hidden')" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 py-3 rounded-xl font-bold transition-colors">ปิดหน้าต่าง</button>
+             </div>
+        </div>
+    </div>
+   </div>
+     
+     
+
+   <div id="teacher-inventory-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900">🎒 กระเป๋านักเรียน</h3>
+                    <p id="inv-student-name" class="text-indigo-600 font-bold text-sm"></p>
+                </div>
+                <button onclick="document.getElementById('teacher-inventory-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div id="teacher-inventory-list" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-4 p-2">
+                </div>
+            
+            <div class="mt-4 pt-2 border-t text-center text-xs text-gray-400">
+                ครูเป็นผู้กดใช้ไอเทมให้นักเรียนเท่านั้น
+            </div>
+        </div>
+   </div>
+
+<div id="gacha-animation-modal" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 hidden backdrop-blur-sm transition-all">
+        <div class="text-center w-full max-w-md p-6">
+            <div id="gacha-anim-icon" class="text-[150px] mb-8 inline-block select-none drop-shadow-2xl">📦</div>
+            
+            <h2 id="gacha-anim-text" class="text-4xl font-bold text-white tracking-widest mb-4">กำลังสุ่ม...</h2>
+            <p id="gacha-anim-sub" class="text-gray-300 text-lg"></p>
+
+            <button id="gacha-close-btn" onclick="closeGachaModal()" class="hidden mt-8 bg-white text-red-600 font-bold py-3 px-8 rounded-full text-xl hover:scale-105 transition-transform shadow-lg mx-auto">
+                ตกลง
+            </button>
+        </div>
+   </div>
+
+   <div id="manage-quest-categories-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-800">📂 จัดการหมวดหมู่ภารกิจ</h3>
+            <button onclick="document.getElementById('manage-quest-categories-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        </div>
+        
+        <div id="quest-category-list" class="space-y-2 mb-4 max-h-[300px] overflow-y-auto"></div>
+
+        <div class="flex gap-2 border-t pt-4">
+            <input type="text" id="new-quest-category-input" class="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="ชื่อหมวดหมู่ใหม่...">
+            <button onclick="addQuestCategory()" class="bg-green-600 text-white px-3 py-2 rounded-lg font-bold text-sm hover:bg-green-700">+</button>
+        </div>
+    </div>
+</div>
+
+<div id="guild-penalty-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[110] p-4 font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full transform transition-all overflow-hidden relative">
+        
+        <div id="gp-header-bar" class="h-2 w-full bg-gray-200"></div>
+
+        <div class="p-6 text-center">
+            <div id="gp-icon-bg" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl shadow-inner transition-colors">
+                <span id="gp-icon">⚠️</span>
+            </div>
+
+            <h3 id="gp-title" class="text-xl font-black text-gray-800 mb-1">หัวข้อแจ้งเตือน</h3>
+            <p id="gp-subtitle" class="text-sm text-gray-500 mb-4">รายละเอียด...</p>
+            
+            <div class="bg-gray-50 rounded-xl border border-gray-100 p-3 mb-4 text-left max-h-40 overflow-y-auto custom-scrollbar shadow-inner">
+                <ul id="gp-list" class="space-y-2 text-sm">
+                    </ul>
+            </div>
+            
+            <div id="gp-total-section" class="hidden mb-4 bg-orange-50 p-2 rounded-lg border border-orange-100">
+                <span class="text-xs text-orange-600 font-bold uppercase tracking-wider">ยอดรวมค่าปรับ</span>
+                <div class="text-2xl font-black text-orange-600 tracking-tight" id="gp-total-amount">0</div>
+                <span class="text-[10px] text-orange-400">แต้ม</span>
+            </div>
+
+            <p id="gp-footer-text" class="text-[10px] text-gray-400 mb-0">หมายเหตุ...</p>
+        </div>
+        
+        <div id="gp-actions" type="button" class="bg-gray-50 px-6 py-4 flex gap-3 border-t border-gray-100">
+        </div>
+    </div>
+</div>
+
+<div id="bulk-give-reward-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 flex flex-col max-h-[85vh]">
+        <div class="text-center mb-4 shrink-0">
+            <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2 text-2xl">🎁</div>
+            <h2 class="text-xl font-bold text-gray-800">แจกของขวัญฟรี</h2>
+            <p class="text-xs text-gray-500">เลือกของที่ต้องการแจกให้นักเรียนที่เลือก (ไม่หักแต้ม)</p>
+            <div id="bulk-give-preview" class="text-xs text-purple-600 bg-purple-50 p-2 rounded-lg mt-2 border border-purple-100 truncate">...</div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto custom-scrollbar border rounded-xl p-2 bg-gray-50 mb-4 space-y-2" id="bulk-give-list">
+            </div>
+
+        <div class="bg-purple-50 p-3 rounded-lg border border-purple-100 flex items-center justify-between shrink-0 mb-4">
+            <label class="text-sm font-bold text-purple-800 flex items-center gap-2">
+                📦 แจกคนละ (ชิ้น):
+            </label>
+            <div class="flex items-center bg-white rounded-lg border border-purple-200 shadow-sm">
+                <button onclick="adjustBulkGiveQty(-1)" class="w-10 py-1 text-purple-600 hover:bg-purple-50 font-bold text-lg rounded-l-lg transition-colors">-</button>
+                <input type="number" id="bulk-give-qty" value="1" min="1" class="w-16 text-center font-bold text-purple-700 outline-none border-x border-purple-100 py-1" onchange="if(this.value<1)this.value=1">
+                <button onclick="adjustBulkGiveQty(1)" class="w-10 py-1 text-purple-600 hover:bg-purple-50 font-bold text-lg rounded-r-lg transition-colors">+</button>
+            </div>
+        </div>
+
+        <div class="flex gap-3 pt-2 shrink-0">
+            <button onclick="document.getElementById('bulk-give-reward-modal').classList.add('hidden')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg font-bold">ยกเลิก</button>
+            <button onclick="confirmBulkGiveReward()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg shadow-md font-bold">ยืนยันแจก</button>
+        </div>
+    </div>
+</div>
+
+<div id="bulk-warning-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 transform transition-all scale-100">
+        <div class="text-center mb-6">
+            <div id="bw-icon-bg" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner">⚠️</div>
+            <h3 id="bulk-warning-title" class="text-xl font-bold text-gray-900">จัดการใบเตือน</h3>
+            <p id="bulk-warning-subtitle" class="text-gray-500 text-sm mt-1">...</p>
+        </div>
+        
+        <input type="hidden" id="bulk-warning-type"> <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">จำนวนใบเตือน (ใบ)</label>
+                <div class="flex items-center border border-gray-300 rounded-xl overflow-hidden">
+                    <button onclick="adjustWarningInput(-1)" class="px-4 py-3 bg-gray-50 hover:bg-gray-100 border-r text-gray-600 font-bold">-</button>
+                    <input type="number" id="bulk-warning-amount" value="1" min="1" class="w-full text-center py-3 outline-none font-bold text-lg text-gray-800" onchange="if(this.value<1)this.value=1">
+                    <button onclick="adjustWarningInput(1)" class="px-4 py-3 bg-gray-50 hover:bg-gray-100 border-l text-gray-600 font-bold">+</button>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">เหตุผล / หมายเหตุ</label>
+                <input type="text" id="bulk-warning-reason" placeholder="เช่น คุยเสียงดัง, ช่วยงานครู..." class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-yellow-400 outline-none transition-all">
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-8">
+            <button onclick="document.getElementById('bulk-warning-modal').classList.add('hidden')" class="flex-1 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors">ยกเลิก</button>
+            <button onclick="confirmBulkWarning()" id="btn-confirm-warning" class="flex-1 py-3 text-white bg-yellow-500 hover:bg-yellow-600 rounded-xl font-bold shadow-lg transition-transform active:scale-95">ยืนยัน</button>
+        </div>
+    </div>
+</div>
+
+<div id="bank-locked-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[70] p-4 transition-opacity">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-100 border-t-4 border-red-500 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-red-50 to-white -z-10"></div>
+        
+        <div class="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl border-4 border-red-50 relative z-10">
+            <span class="text-5xl drop-shadow-sm animate-bounce">🔒</span>
+        </div>
+
+        <h3 class="text-2xl font-black text-gray-800 mb-1">บัญชีถูกระงับ!</h3>
+        <p class="text-gray-500 text-sm mb-6 font-medium">Account Suspended</p>
+
+        <div class="bg-red-50 rounded-xl p-5 mb-6 border border-red-100 shadow-inner">
+            <p class="font-bold text-gray-800 text-lg mb-2" id="locked-student-name">ชื่อนักเรียน</p>
+            <div class="flex items-center justify-center gap-2 text-red-600 font-bold bg-white/80 py-2 rounded-lg border border-red-100">
+                <span class="text-sm">⚠️ ติดสถานะใบเตือน</span>
+                <span class="text-xl px-1" id="locked-warning-count">0</span>
+                <span class="text-sm">ใบ</span>
+            </div>
+        </div>
+
+        <p class="text-xs text-gray-400 mb-6 px-4 leading-relaxed">
+            ไม่สามารถทำธุรกรรมได้ในขณะนี้<br>
+            กรุณาติดต่อครูเพื่อรับภารกิจ <span class="text-red-500 font-bold">"ลบล้างโทษ"</span>
+        </p>
+
+        <button onclick="document.getElementById('bank-locked-modal').classList.add('hidden'); document.getElementById('bank-locked-modal').classList.remove('flex')" class="w-full py-3.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+            <span>เข้าใจแล้ว</span>
+        </button>
+    </div>
+</div>
+
+<div id="quest-distribution-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[80] p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+        
+        <div class="p-5 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl shrink-0">
+            <div>
+                <h3 class="text-xl font-bold text-indigo-900 flex items-center gap-2">
+                    ⚡ แจกรางวัลภารกิจ
+                </h3>
+                <p id="quest-dist-title" class="text-sm text-indigo-600 font-bold mt-1">...</p>
+            </div>
+            <button onclick="document.getElementById('quest-distribution-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-white text-gray-400 hover:text-red-500 flex items-center justify-center font-bold shadow-sm transition-colors">
+                ✕
+            </button>
+        </div>
+
+        <div class="p-4 bg-white border-b flex flex-col sm:flex-row gap-3 items-center shrink-0">
+            <div class="relative flex-1 w-full">
+                <input type="text" id="quest-dist-search" oninput="renderQuestStudentSelector()" 
+                    placeholder="🔍 ค้นหาชื่อ หรือเลขประจำตัว..." 
+                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="text-sm font-bold text-gray-600">เลือกแล้ว: <span id="quest-dist-count" class="text-indigo-600 text-lg">0</span> คน</span>
+                <button onclick="clearQuestDistSelection()" class="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded border border-transparent hover:border-red-200 transition-colors">
+                    ล้าง
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 bg-gray-50 custom-scrollbar relative">
+            <div id="quest-dist-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                </div>
+        </div>
+
+        <div class="p-4 border-t bg-white rounded-b-xl shrink-0">
+            <div class="flex items-center justify-between mb-4 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <label class="font-bold text-indigo-800 text-sm flex items-center gap-2">
+                    🔢 จำนวนครั้งที่ทำ:
+                </label>
+                <div class="flex items-center bg-white rounded-lg border border-indigo-200 shadow-sm">
+                    <button onclick="adjustQuestDistQty(-1)" class="w-10 py-1 text-indigo-600 hover:bg-indigo-50 font-bold text-lg rounded-l-lg">-</button>
+                    <input type="number" id="quest-dist-qty" value="1" min="1" class="w-16 text-center font-bold text-indigo-700 outline-none border-x border-indigo-100 py-1">
+                    <button onclick="adjustQuestDistQty(1)" class="w-10 py-1 text-indigo-600 hover:bg-indigo-50 font-bold text-lg rounded-r-lg">+</button>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('quest-distribution-modal').classList.add('hidden')" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors">
+                    ยกเลิก
+                </button>
+                <button onclick="confirmQuestDistribution()" class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+                    <span>⚡ แจกแต้มทันที</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="manage-reward-categories-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">จัดการหมวดหมู่ของรางวัล</h2>
+        
+        <div class="flex gap-2 mb-4">
+            <input type="text" id="new-reward-cat-name" placeholder="ชื่อหมวดหมู่ใหม่..." class="flex-1 px-4 py-2 border rounded-lg">
+            <button onclick="addRewardCategory()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-indigo-700">+</button>
+        </div>
+
+        <div id="manage-reward-cat-list" class="space-y-2 max-h-60 overflow-y-auto mb-4 custom-scrollbar">
+            </div>
+
+        <button onclick="document.getElementById('manage-reward-categories-modal').classList.add('hidden'); document.getElementById('manage-reward-categories-modal').classList.remove('flex')" class="w-full bg-gray-100 text-gray-600 py-2 rounded-lg font-bold">ปิด</button>
+    </div>
+</div>
+
+<div id="quiz-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full p-6 flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center mb-4 border-b pb-2">
+            <div>
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">📝 ระบบตรวจให้คะแนนอัตโนมัติ</h2>
+                <p class="text-xs text-gray-500">อัปโหลดไฟล์ CSV คำตอบ -> กรอกเฉลย -> แจกแต้ม</p>
+            </div>
+            <button onclick="document.getElementById('quiz-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        </div>
+
+        <div id="quiz-step-1" class="text-center py-10 border-2 border-dashed border-gray-300 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer" onclick="document.getElementById('quiz-file-input').click()">
+            <div class="text-5xl mb-3">📂</div>
+            <p class="text-gray-600 font-bold">คลิกเพื่อเลือกไฟล์ CSV หรือ XLSX</p>
+            <p class="text-xs text-gray-400 mt-1">รองรับไฟล์จากแบบฟอร์มคำถามนอกห้องเรียน</p>
+            <input type="file" id="quiz-file-input" accept=".csv, .xlsx, .xls" class="hidden" onchange="handleQuizFile(this)">
+        </div>
+
+        <div id="quiz-step-2" class="hidden flex-1 overflow-hidden flex flex-col">
+            <div class="bg-blue-50 p-3 rounded-lg border border-blue-200 mb-3 flex items-start gap-3">
+                <span class="text-2xl">🗝️</span>
+                <div class="flex-1">
+                    <h3 class="font-bold text-blue-800 text-sm">กำหนดเฉลยและคะแนน</h3>
+                    <p class="text-xs text-blue-600">กรอกคำตอบที่ถูกต้องให้ตรงเป๊ะๆ (ระบบจะจับคู่ให้อัตโนมัติ)</p>
+                </div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto custom-scrollbar border rounded-lg">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-100 text-gray-700 sticky top-0 shadow-sm">
+                        <tr>
+                            <th class="px-4 py-2 text-left w-1/3">คำถาม</th>
+                            <th class="px-4 py-2 text-left w-1/3">เฉลยคำตอบ (ต้องตรงเป๊ะ)</th>
+                            <th class="px-4 py-2 text-center w-24">คะแนน</th>
+                        </tr>
+                    </thead>
+                    <tbody id="quiz-config-list" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <div class="pt-4 border-t mt-3 flex justify-between items-center">
+                <div class="text-xs text-gray-500">
+                    พบนักเรียนในไฟล์: <span id="quiz-student-count" class="font-bold text-indigo-600">0</span> คน
+                </div>
+                <button onclick="previewQuizCalculation()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-md">
+                    ต่อไป: คำนวณแต้ม ➡️
+                </button>
+            </div>
+        </div>
+
+        <div id="quiz-step-3" class="hidden flex-1 overflow-hidden flex flex-col">
+            <h3 class="font-bold text-gray-800 mb-2">สรุปคะแนนที่จะได้รับ</h3>
+            <div class="flex-1 overflow-y-auto custom-scrollbar border rounded-lg bg-gray-50">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-200 text-gray-700 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2 text-left">ชื่อ-สกุล</th>
+                            <th class="px-4 py-2 text-center">ถูก (ข้อ)</th>
+                            <th class="px-4 py-2 text-center text-green-700 font-bold">แต้มรวม</th>
+                        </tr>
+                    </thead>
+                    <tbody id="quiz-preview-list" class="divide-y divide-gray-200"></tbody>
+                </table>
+            </div>
+            <div class="pt-4 border-t mt-3 flex gap-3">
+                <button onclick="resetQuizModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg font-bold">เริ่มใหม่</button>
+                <button onclick="confirmQuizDistribution()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold shadow-lg">
+                    ✅ ยืนยันแจกแต้ม
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- GROUP MODAL -->
+
+<div id="manage-group-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+        <div class="p-6 border-b flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800" id="manage-group-title">สร้างกลุ่มใหม่</h3>
+            <button onclick="document.getElementById('manage-group-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
+            <input type="hidden" id="group-id-input">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">ชื่อกลุ่ม</label>
+                    <input type="text" id="group-name-input" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="เช่น กลุ่มโครงงานวิทย์...">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">ไอคอน</label>
+                    <input type="text" id="group-icon-input" class="w-full border border-gray-300 rounded-lg p-2 text-center" placeholder="เช่น 🧪" value="👥">
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label class="block text-sm font-bold text-gray-700 mb-1">เลือกสมาชิก</label>
+                <input type="text" id="group-member-search" placeholder="🔍 ค้นหาชื่อนักเรียน..." class="w-full border border-gray-200 rounded-lg p-2 text-sm mb-2" oninput="renderGroupMemberSelector()">
+            </div>
+            
+            <div id="group-member-list" class="border rounded-lg h-60 overflow-y-auto p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                </div>
+        </div>
+
+        <div class="p-4 border-t bg-gray-50 flex justify-end gap-2 rounded-b-xl">
+            <button onclick="document.getElementById('manage-group-modal').classList.add('hidden')" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-bold">ยกเลิก</button>
+            <button onclick="saveCustomGroup()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow">บันทึกกลุ่ม</button>
+        </div>
+    </div>
+</div>
+
+<div id="group-point-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 relative">
+        <button onclick="document.getElementById('group-point-modal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        
+        <div class="text-center mb-6">
+            <div id="gp-modal-icon" class="text-5xl mb-2">👥</div>
+            <h3 id="gp-modal-name" class="text-xl font-bold text-gray-800">แจกแต้มกลุ่ม</h3>
+            <p id="gp-modal-count" class="text-sm text-gray-500">สมาชิก 0 คน</p>
+
+            <div class="mt-2">
+                <button onclick="document.getElementById('gp-member-list').classList.toggle('hidden')" class="text-xs text-indigo-500 hover:text-indigo-700 font-bold underline cursor-pointer">
+                    (ดูรายชื่อสมาชิก)
+                </button>
+           </div>
+        </div>
+
+        <div id="gp-member-list" class="hidden mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100 max-h-32 overflow-y-auto custom-scrollbar">
+            <div class="text-center text-gray-400 text-xs">กำลังโหลด...</div>
+        </div>
+
+
+        <div class="flex border-b mb-4">
+            <button onclick="switchGroupPointTab('custom')" id="gp-tab-custom" class="flex-1 pb-2 border-b-2 border-indigo-600 text-indigo-600 font-bold text-sm">กำหนดเอง</button>
+            <button onclick="switchGroupPointTab('mission')" id="gp-tab-mission" class="flex-1 pb-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-bold text-sm">เลือกภารกิจ</button>
+        </div>
+
+        <div id="gp-content-custom" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">จำนวนแต้ม (ต่อคน)</label>
+                <input type="number" id="gp-amount" class="w-full text-center text-2xl font-bold border border-indigo-200 rounded-lg py-2 text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none" value="10">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">เหตุผล</label>
+                <input type="text" id="gp-reason" class="w-full border border-gray-300 rounded-lg p-2 text-sm" placeholder="เช่น ทำงานกลุ่มสำเร็จ...">
+            </div>
+        </div>
+
+        <div id="gp-content-mission" class="hidden space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">เลือกภารกิจ</label>
+                <select id="gp-mission-select" class="w-full border border-gray-300 rounded-lg p-2 text-sm" onchange="onGroupMissionSelect()">
+                    <option value="">-- เลือกภารกิจ --</option>
+                </select>
+            </div>
+            <div id="gp-mission-preview" class="hidden bg-indigo-50 p-3 rounded-lg border border-indigo-100 text-center">
+                <div class="text-2xl mb-1" id="gp-mp-icon"></div>
+                <div class="font-bold text-gray-800 text-sm" id="gp-mp-title"></div>
+                <div class="text-green-600 font-bold mt-1" id="gp-mp-points"></div>
+            </div>
+        </div>
+
+        <div class="mt-6">
+            <button onclick="confirmGroupPoints()" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
+                <span>🎁</span> แจกแต้มให้ทุกคน
+            </button>
+            <p class="text-[10px] text-center text-gray-400 mt-2">*คำนวณบัฟส่วนตัวให้แต่ละคนอัตโนมัติ</p>
+        </div>
+    </div>
+</div>
+
+<div id="student-bank-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[90] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+        
+        <h3 id="std-bank-title" class="text-2xl font-bold mb-1 text-gray-800">ทำรายการ</h3>
+        <p class="text-xs text-gray-400 mb-4">บริหารจัดการแต้มของคุณ</p>
+        
+        <div class="bg-indigo-50 p-4 rounded-xl mb-5 border border-indigo-100">
+            <div class="flex justify-between text-sm text-gray-600 mb-2">
+                <span>💰 กระเป๋าตังค์:</span>
+                <span id="std-bank-wallet" class="font-bold text-gray-800">0</span>
+            </div>
+            <div class="flex justify-between text-sm text-gray-600">
+                <span>🏦 ธนาคาร:</span>
+                <span id="std-bank-balance" class="font-bold text-blue-600">0</span>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-gray-700 font-bold mb-2 text-sm">จำนวนแต้มที่ต้องการ</label>
+            <input type="number" id="std-bank-amount" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-3xl font-bold text-indigo-600 focus:border-indigo-500 focus:outline-none bg-white placeholder-gray-200 transition-all" placeholder="0">
+            
+            <div class="flex gap-2 mt-3">
+                <button onclick="setStudentBankAmount(100)" class="flex-1 py-1.5 bg-gray-100 rounded-lg text-xs font-bold text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors">100</button>
+                <button onclick="setStudentBankAmount(500)" class="flex-1 py-1.5 bg-gray-100 rounded-lg text-xs font-bold text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors">500</button>
+                <button onclick="setStudentBankAmount('all')" class="flex-1 py-1.5 bg-indigo-100 rounded-lg text-xs font-bold text-indigo-600 hover:bg-indigo-200 transition-colors">หมดหน้าตัก</button>
+            </div>
+        </div>
+
+        <div class="flex gap-3">
+            <button onclick="document.getElementById('student-bank-modal').classList.add('hidden')" class="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition-all">ยกเลิก</button>
+            <button id="btn-confirm-std-bank" onclick="confirmStudentBankTransaction()" class="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">ยืนยัน</button>
+        </div>
+    </div>
+</div>
+
+  </div> <!-- End App -->
+
+  
+  
+ </body>
+</html>
