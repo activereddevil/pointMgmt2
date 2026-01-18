@@ -107,7 +107,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.20</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.23</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -133,7 +133,15 @@
         
         <!-- ============ STUDENT DASHBOARD (View Only) ============ -->
         <div id="content-student-dashboard" class="tab-content hidden space-y-6">
-            
+            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-5 py-2 rounded-xl shadow-md flex items-center gap-3 border border-indigo-400">
+                <div class="text-right">
+                    <p class="text-[10px] font-medium opacity-80 uppercase tracking-wider">อัตราดอกเบี้ยปัจจุบัน</p>
+                    <p class="text-2xl font-bold leading-none">
+                        <span id="home-interest-display"></span><span class="text-sm font-normal">%</span> <span class="text-sm font-normal"> ต่อชั่วโมง</span>
+                    </p>
+                </div>
+                <div class="text-3xl opacity-50">📈</div>
+            </div>
 
             <div id="student-streak-widget" class="bg-white rounded-xl shadow-sm border border-orange-100 p-4 mb-6 relative overflow-hidden"> 
                 <div class="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-full -mr-10 -mt-10 blur-xl"></div>
@@ -1944,4 +1952,3 @@
   
  </body>
 </html>
-
