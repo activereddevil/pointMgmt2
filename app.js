@@ -2055,7 +2055,7 @@ window.handleEditRewardSubmit = async (e) => {
 
     
         const isQuotaUnlimited = document.getElementById('edit-reward-quota-unlimited').checked;
-        quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('edit-reward-quota').value) || 0);
+        const quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('edit-reward-quota').value) || 0);
     
 
     const updates = {
@@ -3925,7 +3925,7 @@ window.handleAddReward = async (e) => {
     const stock = isUnlimited ? -1 : parseInt(document.getElementById('add-reward-stock').value);
     
     const isQuotaUnlimited = document.getElementById('add-reward-quota-unlimited').checked;
-    quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('add-reward-quota').value) || 0);
+    const quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('add-reward-quota').value) || 0);
     
 
     let gachaPool = [];
