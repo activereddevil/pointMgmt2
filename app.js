@@ -719,6 +719,8 @@ function subscribeToData() {
             document.getElementById('interest-rate-display').textContent = (config.interest_rate || 1.0).toFixed(2) + '%';
             const homeIntDisplay = document.getElementById('home-interest-display');
                 if(homeIntDisplay) homeIntDisplay.textContent = (config.interest_rate || 1.0).toFixed(2);
+            const stdIntDisplay = document.getElementById('student-interest-display');
+                if(stdIntDisplay) stdIntDisplay.textContent = (config.interest_rate || 1.0).toFixed(2);
             if (userRole === 'teacher') {
                  // Check if focused to avoid overwriting while typing
                 
