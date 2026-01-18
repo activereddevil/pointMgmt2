@@ -4012,7 +4012,7 @@ window.confirmRedeemAction = async () => {
         const newItems = [];
         for(let i=0; i<qty; i++) {
             newItems.push({
-                instance_id: crypto.randomUUID(),
+                id: crypto.randomUUID(),
                 reward_id: reward.id,
                 name: reward.name,
                 image: reward.image || '',
@@ -4167,7 +4167,7 @@ window.useItem = async (itemId, itemName) => {
     const s = currentInvStudent; 
     if (!s) return;
 
-    const inventoryItem = s.inventory.find(i => i.id === itemId);
+    const inventoryItem = s.inventory.find(i => (i.id || i.instance_id) === itemId);
     if(!inventoryItem) return alert('ไอเทมหายไปแล้ว');
 
     // เตรียมตัวแปร Database
@@ -4176,9 +4176,8 @@ window.useItem = async (itemId, itemName) => {
     const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
 
     // ลบไอเทมเดิมออกก่อน (ใช้แล้วต้องหายไป)
-    const newInventory = s.inventory.filter(i => i.id !== itemId);
+    const newInventory = s.inventory.filter(i => (i.id || i.instance_id) !== itemId);
     batch.update(sRef, { inventory: newInventory });
-
     let logMsg = "";
     
    // 🔥🔥 [แก้ใหม่] เช็ค Gacha จากตัวไอเทมโดยตรง (ไม่ต้องพึ่งร้านค้า) 🔥🔥
@@ -4194,17 +4193,64 @@ window.useItem = async (itemId, itemName) => {
 
     // ถ้ามี Pool (ไม่ว่าจะจากตัวมันเอง หรือจากร้าน) ถือว่าเป็น Gacha
     if (pool && pool.length > 0) {
-        // --- โหมดเปิดกล่องสุ่ม ---
+        
+        // ============================================================
+        // 🔥 LOGIC ใหม่: คัดกรองของที่ "หมดสต็อก" หรือ "หายไป" ออกก่อนสุ่ม
+        // ============================================================
+        const validPool = pool.filter(slot => {
+            // A. ถ้าไม่ใช่สิ่งของ (เช่น แต้ม, บัฟ, ข้อความ) -> เก็บไว้เสมอ (ถือว่าไม่มีวันหมด)
+            if (slot.type !== 'reward_ref') return true;
+
+            // B. ถ้าเป็นสิ่งของ -> เช็คสต็อกจริงเดี๋ยวนี้เลย
+            const realItem = rewards.find(r => r.id === slot.reward_id);
+            
+            // ถ้าหาไม่เจอ หรือ ของหมด (stock = 0) -> ตัดทิ้ง! (return false)
+            if (!realItem) return false;
+            // เช็คสต็อก (ถ้าไม่ใช่ Unlimited (-1) และเหลือน้อยกว่า 1) -> หมด
+            if (realItem.stock !== -1 && realItem.stock < 1) return false;
+
+            // ถ้าของยังเหลือ -> เก็บไว้ (return true)
+            return true;
+        });
+
+        // กรณีฉุกเฉิน: ของในกล่องหมดเกลี้ยงทุกชิ้น! (ไม่มีอะไรให้สุ่มเลย)
+        if (validPool.length === 0) {
+            const refund = 500; // แต้มชดเชย (ปรับได้)
+            alert(`😭 เสียใจด้วยครับ ของรางวัลในกล่องนี้ "หมดเกลี้ยง" ทุกอย่างแล้ว\nระบบเปลี่ยนเป็นแต้มชดเชยให้ ${refund} แต้ม ครับ`);
+            
+            // คืนแต้มให้นักเรียน + บันทึกประวัติ
+            batch.update(sRef, { points: increment(refund) });
+            
+            batch.set(hRef, {
+                student_id: s.id,
+                student_name: s.full_name,
+                action: `เปิดกล่องเปล่า (ของหมด): ${itemName}`,
+                amount: refund,
+                type: 'gacha_refund',
+                timestamp: serverTimestamp()
+            });
+            
+            await batch.commit();
+            showToast('ได้รับแต้มชดเชยเรียบร้อย');
+            return; // จบการทำงาน
+        }
+
+        // --- โหมดเปิดกล่องสุ่ม (ใช้ Pool ที่คัดกรองแล้ว) ---
         logMsg = `เปิดกล่องสุ่ม: ${itemName}`;
-        const roll = Math.random() * 100;
+        
+        // คำนวณผลรวมโอกาสใหม่ (เพราะพอตัดของออก ยอดรวมอาจไม่ถึง 100%)
+        const totalChance = validPool.reduce((sum, item) => sum + (item.chance || 0), 0);
+        let roll = Math.random() * totalChance; // สุ่มจาก 0 ถึงยอดรวมใหม่
         let cumulative = 0;
         let wonSlot = null;
         
-        // ใช้ pool ที่เราดึงมา (ไม่ใช่ masterReward.gacha_pool)
-        for (let slot of pool) { 
+        // สุ่มจาก Pool ที่คัดกรองแล้ว (validPool)
+        for (let slot of validPool) { 
             cumulative += slot.chance;
             if (roll < cumulative) { wonSlot = slot; break; }
         }
+        // กันเหนียว (ถ้าหลุด Loop ให้เอาตัวสุดท้าย)
+        if (!wonSlot && validPool.length > 0) wonSlot = validPool[validPool.length - 1];
 
         // Animation Setup
         const modal = document.getElementById('gacha-animation-modal');
@@ -4464,7 +4510,7 @@ function renderTeacherInventory() {
             </div>
             <h4 class="font-bold text-sm text-center text-gray-800 mb-1">${item.name}</h4>
             <p class="text-xs text-gray-500 mb-3 text-center">${getItemTypeLabel(item)}</p>
-            <button onclick="useItem('${item.id}', '${item.name}')" 
+            <button onclick="useItem('${item.id || item.instance_id}', '${item.name}')" 
                 class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center justify-center gap-2">
                 <span>⚡</span> กดใช้
             </button>
