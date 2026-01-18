@@ -2247,8 +2247,8 @@ function renderShopGrid() {
     }
 
     let items = rewards.map(r => {
-        // เช็คว่าเป็นกาชาหรือไม่? (ดูจาก type หรือการมี gacha_data)
-        const isGacha = r.type === 'random_box' || (r.gacha_data && r.gacha_data.length > 0);
+        // ✅ แก้ไข 1: เพิ่มการเช็ค gacha_custom ให้ครบถ้วน
+        const isGacha = r.type === 'random_box' || r.type === 'gacha_custom' || (r.gacha_data && r.gacha_data.length > 0);
 
         // --- ส่วนลด ---
         let guildDiscount = 0;
@@ -2381,11 +2381,7 @@ function renderShopGrid() {
         }
 
         // เลือกฟังก์ชันที่จะเรียก (กาชา หรือ แลกปกติ)
-        let clickAction = `selectRewardForRedeem('${r.id}', ${r.finalPoints})`;
-        if (r.isGacha) {
-            clickAction = `spinGacha('${r.id}')`;
-        }
-
+        let clickAction = `selectRewardForRedeem('${r.id}')`;
         return `
         <div class="border rounded-xl p-3 flex flex-col justify-between bg-white shadow-sm transition-all ${disabled ? 'opacity-70 bg-gray-50' : 'hover:shadow-md hover:border-amber-300'}">
             <div class="h-24 bg-gray-50 rounded-lg flex items-center justify-center mb-2 overflow-hidden border border-gray-100 relative">
