@@ -2053,11 +2053,10 @@ window.handleEditRewardSubmit = async (e) => {
     const isUnlimited = document.getElementById('edit-reward-unlimited').checked;
     const stock = isUnlimited ? -1 : parseInt(document.getElementById('edit-reward-stock').value);
 
-    let quota = 0;
-    if (type !== 'gacha_custom') {
+    
         const isQuotaUnlimited = document.getElementById('edit-reward-quota-unlimited').checked;
         quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('edit-reward-quota').value) || 0);
-    }
+    
 
     const updates = {
         is_active: document.getElementById('edit-reward-active').checked,
@@ -2282,7 +2281,7 @@ function renderShopGrid() {
         let remainingQuota = -1;
 
         // ถ้าไม่ใช่กาชา ให้เช็คโควตาตามปกติ
-        if (!isGacha && r.quota > 0) {
+        if (r.quota > 0) {
             const currentRedeemed = (s.redeemed_history && s.redeemed_history[r.id]) || 0;
             remainingQuota = r.quota - currentRedeemed;
             
@@ -2370,16 +2369,14 @@ function renderShopGrid() {
         let quotaLabel = '';
         
         // แสดงเฉพาะสินค้าที่ไม่ใช่กาชา และมีการจำกัดโควตา
-        if (!r.isGacha && r.quota > 0) {
+        if (r.quota > 0) {
             if (r.isQuotaFull) {
                 quotaLabel = `<div class="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-full border border-red-100">เต็มแล้ว (${r.quota}/${r.quota})</div>`;
             } else {
                 quotaLabel = `<div class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">เหลือ ${r.remainingQuota} สิทธิ์</div>`;
             }
-        } else if (r.isGacha) {
-            // ถ้าเป็นกาชา ไม่ต้องโชว์อะไร (หรืออยากโชว์ว่า "ไม่อั้น" ก็แก้ตรงนี้ได้)
-            quotaLabel = ''; 
-        } else {
+        }
+        else {
              quotaLabel = `<div class="text-[10px] text-gray-400">ไม่จำกัดโควตา</div>`;
         }
 
@@ -2576,137 +2573,124 @@ window.calculateRedeemTotal = () => {
     // -------------------------------------
 };
 
-window.confirmRedeemAction = async () => {
-    // 1. ดึงข้อมูลตัวแปร
-    const qty = parseInt(document.getElementById('redeem-qty').value);
-    if (qty <= 0) return alert('กรุณาระบุจำนวนสินค้าอย่างน้อย 1 ชิ้น');
-    if (!redeemTarget || !selectedStudentForRedeem) return;
-
-    const reward = redeemTarget;
-    const student = selectedStudentForRedeem;
-    const totalCost = qty * reward.actualPrice; // ราคาหลังหักส่วนลด
-    
-    const isUnlimited = reward.stock === -1;
-    const isGacha = reward.type === 'gacha_custom'; // เช็คว่าเป็นกาชาไหม
-
-    // --- 2. ตรวจสอบความพร้อม (Basic Check) ---
-    if (student.red_cards > 0 && reward.effect !== 'remove_redcard') return alert('❌ มีใบแดงติดตัว แลกของไม่ได้ครับ');
-    if (student.points < totalCost) return alert('❌ แต้มไม่พอครับ');
-    if (!isUnlimited && reward.stock < qty) return alert(`❌ ของหมด (เหลือ ${reward.stock} ชิ้น)`);
-
-    // --- 3. 🛡️ Logic แยกสาย: กาชา vs ของทั่วไป ---
-    
-    if (isGacha) {
-        // ✅ [Gacha Rule] จำกัดการถือครองในกระเป๋า (Inventory Limit)
-        const MAX_SLOTS = 3;
-        const currentInv = student.inventory || [];
+// ==========================================
+    // ✅ ยืนยันการแลกของ (ฉบับปลดล็อกช่องกระเป๋า)
+    // ==========================================
+    window.confirmRedeemAction = async () => {
+        // 1. ดึงค่าตัวแปร
+        const qty = parseInt(document.getElementById('redeem-qty').value);
+        if (qty <= 0) return alert('กรุณาระบุจำนวนสินค้าอย่างน้อย 1 ชิ้น');
         
-        // นับเฉพาะ "กล่องสุ่ม" ที่ยังไม่ได้เปิด (เผื่อในอนาคตมีไอเทมอื่น)
-        const boxCount = currentInv.filter(i => i.type === 'gacha_box').length;
-        
-        if (boxCount + qty > MAX_SLOTS) {
-            return alert(`❌ กระเป๋าเต็ม! (ถือได้สูงสุด ${MAX_SLOTS} กล่อง)\n\nตอนนี้มีอยู่: ${boxCount} กล่อง\nกำลังจะซื้อเพิ่ม: ${qty} กล่อง\n\n💡 กรุณาไปเปิดกล่องที่มีอยู่ก่อนครับ!`);
-        }
-        // (หมายเหตุ: เราไม่เช็ค reward.quota สำหรับกาชาแล้ว ปล่อยฟรีเลย)
+        if (!redeemTarget || !selectedStudentForRedeem) return;
 
-    } else {
-        // ✅ [Normal Rule] เช็คโควตาต่อคนตามปกติ
+        const reward = redeemTarget;
+        const student = selectedStudentForRedeem;
+        const totalCost = qty * reward.actualPrice; // ราคาหลังหักส่วนลด
+        
+        const isUnlimited = reward.stock === -1;
+        const isGacha = reward.type === 'gacha_custom'; 
+
+        // 2. ตรวจสอบความพร้อม (Basic Check)
+        if (student.red_cards > 0 && reward.effect !== 'remove_redcard') return alert('❌ มีใบแดงติดตัว แลกของไม่ได้ครับ');
+        if (student.points < totalCost) return alert('❌ แต้มไม่พอครับ');
+        if (!isUnlimited && reward.stock < qty) return alert(`❌ ของหมด (เหลือ ${reward.stock} ชิ้น)`);
+
+        // 3. 🛡️ เช็คโควตาการซื้อ (Purchase Quota) - ใช้กับทุกประเภท
         if (reward.quota > 0) {
             const currentRedeemed = (student.redeemed_history && student.redeemed_history[reward.id]) || 0;
             if (currentRedeemed + qty > reward.quota) {
-                return alert(`❌ เกินโควตา! คุณแลกไปแล้ว ${currentRedeemed}/${reward.quota} ชิ้น`);
+                return alert(`❌ เกินโควตา! คุณแลกไปแล้ว ${currentRedeemed}/${reward.quota} สิทธิ์`);
             }
         }
-    }
-
-    // --- 4. เตรียมข้อมูลบันทึก (Batch Write) ---
-    const batch = writeBatch(db);
-    const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id);
-    const rRef = doc(db, 'artifacts', appId, 'public', 'data', 'rewards', reward.id);
-    const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
-
-    // อัปเดตข้อมูลนักเรียน (ตัดแต้ม)
-    const updateData = { points: increment(-totalCost) };
-
-    if (isGacha) {
-        // ✅ [Gacha] สร้างไอเท็มเข้ากระเป๋า (Inventory)
-        const newItems = [];
-        for(let i=0; i<qty; i++) {
-            newItems.push({
-                instance_id: crypto.randomUUID(), // ID เฉพาะของกล่องนี้ (ไม่ซ้ำใคร)
-                reward_id: reward.id,
-                name: reward.name,
-                image: reward.image || '',
-                type: 'gacha_box', // ระบุประเภทให้ชัดเจน
-                obtained_at: Date.now()
-            });
-        }
-        // ใช้ arrayUnion เพื่อยัดของใหม่ต่อท้าย Array เดิม
-        updateData.inventory = arrayUnion(...newItems);
         
-    } else {
-        // [Normal] อัปเดตประวัติการแลก (Quota Count)
+        // ❌ [ลบส่วนเช็ค Inventory Limit ออกไปแล้ว] ❌
+        // ที่เคยเช็ค MAX_SLOTS = 3 ลบออก เพื่อให้ถือได้ไม่จำกัด
+
+        // 4. เตรียมข้อมูลบันทึก (Batch Write)
+        const batch = writeBatch(db);
+        const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id);
+        const rRef = doc(db, 'artifacts', appId, 'public', 'data', 'rewards', reward.id);
+        const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
+
+        // อัปเดตข้อมูลนักเรียน (ตัดแต้ม)
+        const updateData = { points: increment(-totalCost) };
+        
+        // เพิ่มการนับยอดการซื้อ (Quota Count) ให้ทั้ง Gacha และของปกติ
         const redeemedKey = `redeemed_history.${reward.id}`;
         updateData[redeemedKey] = increment(qty);
-    }
-
-    batch.update(sRef, updateData);
-
-    // ตัดสต็อก (ถ้ามีจำกัด)
-    if (!isUnlimited) {
-        batch.update(rRef, { stock: increment(-qty) });
-    }
-    
-    // บันทึก History
-    batch.set(hRef, {
-        student_id: student.id,
-        student_name: student.full_name,
-        action: `แลกรางวัล: ${reward.name} (x${qty})`,
-        amount: -totalCost,
-        type: isGacha ? 'buy_gacha' : 'redeem',
-        timestamp: serverTimestamp(),
-        meta: { 
-            reward_id: reward.id, 
-            qty: qty, 
-            is_gacha: isGacha 
-        }
-    });
-
-    try {
-        await batch.commit();
-
-        // --- 5. อัปเดตหน้าจอทันที (Local Update) ---
-        student.points -= totalCost;
 
         if (isGacha) {
-            // อัปเดตกระเป๋า Local
-            if (!student.inventory) student.inventory = [];
-            // สร้าง Mock Item เพื่อให้หน้าจอเห็นว่ามีของเพิ่ม
+            // [Gacha] สร้างไอเท็มเข้ากระเป๋า (Inventory)
+            const newItems = [];
             for(let i=0; i<qty; i++) {
-                student.inventory.push({ type: 'gacha_box', reward_id: reward.id });
+                newItems.push({
+                    instance_id: crypto.randomUUID(),
+                    reward_id: reward.id,
+                    name: reward.name,
+                    image: reward.image || '',
+                    type: 'gacha_box',
+                    obtained_at: Date.now()
+                });
             }
-        } else {
-            // อัปเดตโควตา Local
+            updateData.inventory = arrayUnion(...newItems);
+        }
+
+        batch.update(sRef, updateData);
+
+        // ตัดสต็อก (ถ้ามีจำกัด)
+        if (!isUnlimited) {
+            batch.update(rRef, { stock: increment(-qty) });
+        }
+        
+        // บันทึก History
+        batch.set(hRef, {
+            student_id: student.id,
+            student_name: student.full_name,
+            action: `แลกรางวัล: ${reward.name} (x${qty})`,
+            amount: -totalCost,
+            type: isGacha ? 'buy_gacha' : 'redeem',
+            timestamp: serverTimestamp(),
+            meta: { 
+                reward_id: reward.id, 
+                qty: qty, 
+                is_gacha: isGacha 
+            }
+        });
+
+        try {
+            await batch.commit();
+
+            // 5. อัปเดตหน้าจอทันที (Local Update)
+            student.points -= totalCost;
+
+            // อัปเดตยอดการซื้อ (Quota)
             if (!student.redeemed_history) student.redeemed_history = {};
             const oldQty = student.redeemed_history[reward.id] || 0;
             student.redeemed_history[reward.id] = oldQty + qty;
+
+            if (isGacha) {
+                // อัปเดตกระเป๋า Local
+                if (!student.inventory) student.inventory = [];
+                for(let i=0; i<qty; i++) {
+                    student.inventory.push({ type: 'gacha_box', reward_id: reward.id });
+                }
+            }
+
+            if (!isUnlimited) {
+                reward.stock -= qty;
+            }
+
+            hideRedeemQuantityModal();
+            showToast(`✅ แลกสำเร็จ! (-${totalCost} แต้ม)`);
+            
+            // รีเฟรชหน้าจอร้านค้า
+            renderShopGrid();
+
+        } catch (e) {
+            console.error(e);
+            alert('เกิดข้อผิดพลาด: ' + e.message);
         }
-
-        if (!isUnlimited) {
-            reward.stock -= qty;
-        }
-
-        hideRedeemQuantityModal();
-        showToast(`✅ แลกสำเร็จ! (-${totalCost} แต้ม)`);
-        
-        // รีเฟรชหน้าจอร้านค้า
-        if(typeof renderShopGrid === 'function') renderShopGrid();
-
-    } catch (e) {
-        console.error(e);
-        alert('เกิดข้อผิดพลาด: ' + e.message);
-    }
-};
+    };
 
     
 // 5. Bank Logic
@@ -3661,11 +3645,11 @@ window.toggleRewardTypeInputs = () => {
     if(gachaBuilder) gachaBuilder.classList.toggle('hidden', !isGacha);
 
     // 3. 🟢 [ส่วนใหม่] ซ่อนโควตาถ้าเป็น Gacha
-    const quotaInput = document.getElementById('add-reward-quota');
+  /*  const quotaInput = document.getElementById('add-reward-quota');
     if (quotaInput && quotaInput.parentElement) {
          // ซ่อนทั้งก้อน (Label + Input + Checkbox)
          quotaInput.parentElement.classList.toggle('hidden', isGacha);
-    }
+    } */
 };
 
 
@@ -3762,10 +3746,10 @@ window.toggleEditRewardTypeInputs = () => {
     if(gachaBuilder) gachaBuilder.classList.toggle('hidden', !isGacha);
 
     // 🟢 [ส่วนใหม่] ซ่อนโควตาถ้าเป็น Gacha
-    const quotaInput = document.getElementById('edit-reward-quota');
+  /*  const quotaInput = document.getElementById('edit-reward-quota');
     if (quotaInput && quotaInput.parentElement) {
          quotaInput.parentElement.classList.toggle('hidden', isGacha);
-    }
+    } */
 };
 
 window.addEditGachaSlot = (data = null) => {
@@ -3939,11 +3923,10 @@ window.handleAddReward = async (e) => {
     const isUnlimited = document.getElementById('add-reward-unlimited').checked;
     // ถ้าติ๊กไม่จำกัด ให้ค่าเป็น -1, ถ้าไม่ติ๊ก ให้เอาค่าจากช่องกรอก
     const stock = isUnlimited ? -1 : parseInt(document.getElementById('add-reward-stock').value);
-    let quota = 0;
-    if (type !== 'gacha_custom') {
-        const isQuotaUnlimited = document.getElementById('add-reward-quota-unlimited').checked;
-        quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('add-reward-quota').value) || 0);
-    }
+    
+    const isQuotaUnlimited = document.getElementById('add-reward-quota-unlimited').checked;
+    quota = isQuotaUnlimited ? 0 : (parseInt(document.getElementById('add-reward-quota').value) || 0);
+    
 
     let gachaPool = [];
     let isValid = true;
