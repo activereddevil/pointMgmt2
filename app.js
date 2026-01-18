@@ -571,7 +571,7 @@ function setupNavigation() {
             <button onclick="switchTab('home')" id="tab-home" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-red-500 text-red-600">รายชื่อนักเรียน</button>
             <button onclick="switchTab('punishment')" id="tab-punishment" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">⚠️ คุมประพฤติ</button>
             <button onclick="switchTab('guilds')" id="tab-guilds" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">🏰 กิลด์</button>
-            <button onclick="switchTab('groups')" id="tab-btn-groups" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700"><span>👥</span> จัดกลุ่ม</button>
+            <button onclick="switchTab('groups')" id="tab-btn-groups" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">👥 จัดกลุ่ม</button>
             <button onclick="switchTab('quests')" id="tab-quests" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ภารกิจ</button>
             
             <button onclick="switchTab('history')" id="tab-history" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ประวัติ</button>
@@ -2361,7 +2361,7 @@ function renderShopGrid() {
         let quotaLabel = '';
         if (r.quota > 0) {
             if (r.isQuotaFull) {
-                quotaLabel = `<div class="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-full border border-red-100">เต็มแล้ว (${r.quota}/${r.quota})</div>`;
+                quotaLabel = `<div class="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded-full border border-red-100">สิทธิ์หมดแล้ว (${r.quota}/${r.quota})</div>`;
             } else {
                 quotaLabel = `<div class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">เหลือ ${r.remainingQuota} สิทธิ์</div>`;
             }
@@ -4057,7 +4057,7 @@ function renderStudentInventory(student) {
     container.innerHTML = items.map(item => `
         <div class="border rounded-lg p-3 flex flex-col items-center bg-gray-50 relative group">
             <div class="text-3xl mb-2 transition-transform hover:scale-110 h-10 flex items-center justify-center">
-${item.image || '🎟'}
+${item.image || '📦'}
             </div>
             <div class="font-bold text-xs text-center text-gray-700 leading-tight">${item.name}</div>
             </div>
@@ -4503,24 +4503,51 @@ unsubscribers.push(onSnapshot(getGuildsCol(), (snapshot) => {
 // 3. ฟังก์ชันหลัก
 window.showCreateGuildModal = () => document.getElementById('create-guild-modal').classList.remove('hidden');
 
+// ค้นหาและวางทับฟังก์ชันนี้ใน app.js ครับ
 window.handleCreateGuild = async (e) => {
     e.preventDefault();
     const name = document.getElementById('new-guild-name').value;
     const icon = document.getElementById('new-guild-icon').value || '🛡️';
-    const cooldown = parseInt(document.getElementById('new-guild-cooldown').value) || 0;
-    const fee = parseInt(document.getElementById('new-guild-fee').value) || 0;
+    const cooldown = 0;
+    const fee = 0;
     
     try {
-        await addDoc(collections.guilds(), {
+        // ✅ 1. สร้างกิลด์และเก็บ Reference ไว้
+        const docRef = await addDoc(collections.guilds(), {
             name: name,
             icon: icon,
             rule_cooldown: cooldown,
             rule_fee: fee,
             created_at: serverTimestamp()
         });
+
+        // ปิดหน้าต่างสร้าง + เคลียร์ฟอร์ม
         document.getElementById('create-guild-modal').classList.add('hidden');
         e.target.reset();
-        showToast('สร้างกิลด์เรียบร้อย! ไปเพิ่มสมาชิกได้เลย');
+        
+        // ✅ 2. เพิ่มกิลด์ใหม่เข้าตัวแปรระบบทันที (Hack: เพื่อให้เปิดหน้าจัดการได้โดยไม่ต้องรอ Server Refresh)
+        const newGuildLocal = {
+            id: docRef.id,
+            name: name,
+            icon: icon,
+            rule_cooldown: cooldown,
+            rule_fee: fee,
+            buff_interest: 0,
+            buff_discount: 0
+        };
+        
+        // เช็คกันเหนียว ถ้ายังไม่มีในลิสต์ ก็ยัดเข้าไปเลย
+        if (!guilds.find(g => g.id === docRef.id)) {
+            guilds.push(newGuildLocal);
+        }
+
+        showToast('สร้างกิลด์เรียบร้อย! กำลังเปิดหน้าจัดการสมาชิก...');
+
+        // ✅ 3. สั่งเปิดหน้าจัดการสมาชิกของกิลด์ใหม่ทันที!
+        setTimeout(() => {
+            openManageGuild(docRef.id);
+        }, 300); // หน่วงเวลานิดนึงให้ Animation ปิดหน้าต่างเก่าทำงานสมูทๆ
+
     } catch (err) {
         alert('Error: ' + err.message);
     }
@@ -4655,7 +4682,7 @@ window.openManageGuild = (gid) => {
     document.getElementById('manage-guild-id').value = gid;
     
     // โหลดค่าบัฟ
-    document.getElementById('guild-buff-interest').value = g.buff_interest.toFixed(2) || 0;
+    document.getElementById('guild-buff-interest').value = (g.buff_interest || 0).toFixed(2);
     document.getElementById('guild-buff-discount').value = g.buff_discount || 0;
 
     if(document.getElementById('edit-guild-cooldown')) {
