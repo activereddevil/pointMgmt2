@@ -3911,8 +3911,8 @@ window.confirmRedeemAction = async () => {
     const isGacha = reward.type === 'gacha_custom' || reward.type === 'random_box'; 
 
     // 2. ตรวจสอบความพร้อม (Basic Check)
-    if (warningCount > 0 && !isCureItem) {
-        return alert(`❌ นักเรียนมีใบเตือน (${warningCount} ใบ) ติดตัว \nไม่สามารถแลกของรางวัลทั่วไปได้ครับ`);
+    if (warningCount >= 2 && !isCureItem) {
+        return alert(`❌ นักเรียนมีใบเตือน (${warningCount} ใบ) (ครบ 2 ใบ) \nไม่สามารถแลกของรางวัลทั่วไปได้ครับ ต้องล้างโทษให้เหลือน้อยกว่า 2 ใบ จึงจะแลกของได้`);
     }
     if (student.points < totalCost) return alert('❌ แต้มไม่พอครับ');
     if (!isUnlimited && reward.stock < qty) return alert(`❌ ของหมด (เหลือ ${reward.stock} ชิ้น)`);
