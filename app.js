@@ -4315,6 +4315,12 @@ window.useItem = async (itemId, itemName) => {
                     resultIcon = subReward.image ? `<img src="${subReward.image}" class="w-full h-full object-contain">` : '🎁';
                     resultTitle = subReward.name;
                     resultSub = 'ได้รับไอเทมเข้ากระเป๋า';
+
+                    // ✅ [เพิ่มส่วนนี้] สั่งตัดสต็อกจริงใน Database
+                    if (subReward.stock !== -1) {
+                        const rRef = doc(db, 'artifacts', appId, 'public', 'data', 'rewards', subReward.id);
+                        batch.update(rRef, { stock: increment(-1) });
+                    }
                 }
             }
             // 🛠️ แก้ไขตรงนี้: ไม่ยัดเยียดบัฟ แต่ให้เป็นการ์ดแทน
