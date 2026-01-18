@@ -1120,7 +1120,7 @@ window.renderStudentList = (resetPage = true) => {
                     <div class="flex items-center justify-center">
                         <span class="font-bold text-yellow-600 text-lg">${s.warning_cards || 0}</span>
                     </div>
-                    ${(s.pending_points || 0) > 0 ? `<div class="text-[10px] text-red-500 font-bold mt-1 bg-red-50 px-1 rounded border border-red-100">🔒 อายัด ${s.pending_points}</div>` : ''}
+                    ${(s.pending_points || 0) > 0 ? `<div class="text-[10px] text-red-500 font-bold mt-1 bg-red-50 px-1 rounded border border-red-100">🔒 อายัด ${s.pending_points} แต้ม</div>` : ''}
                 </div>
             </td>
 
@@ -7847,3 +7847,4 @@ window.renderStudentGuild = () => {
         </div>
     `;
 };
+
