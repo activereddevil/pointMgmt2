@@ -494,16 +494,20 @@ function checkCanClaim(lastClaimTimestamp) {
 }
 
 // 4. กดรับแต้ม (Action)
+// ==========================================
+// ✅ ฟังก์ชันเช็คชื่อรายวัน (ฉบับอัปเดต: อายัดแต้มถ้ามีใบเตือน)
+// ==========================================
 window.claimDailyStreak = async () => {
     if (!currentStudentData) return;
     
     const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id);
     
-    // เช็คซ้ำอีกรอบ
+    // ดึงข้อมูลล่าสุดมาเช็ค
     const sSnap = await getDoc(sRef);
     const sData = sSnap.data();
     const streakData = sData.streak_data || { count: 0, last_claim: null, max: 0 };
     
+    // เช็คว่ากดรับไปหรือยัง
     if (!checkCanClaim(streakData.last_claim)) return showToast('วันนี้รับไปแล้วครับ พรุ่งนี้มาใหม่นะ', 'error');
 
     // คำนวณ Streak
@@ -513,7 +517,7 @@ window.claimDailyStreak = async () => {
 
     if (last) {
         const diffHours = (now - last) / (1000 * 60 * 60);
-        if (diffHours > 48) { // เกิน 48 ชม. (ไม่ได้มากดเมื่อวาน)
+        if (diffHours > 48) { // เกิน 48 ชม. (ขาดเช็คชื่อเมื่อวาน)
             newCount = 1;
         } else {
             newCount++;
@@ -526,22 +530,45 @@ window.claimDailyStreak = async () => {
     let pointsToAdd = streakConfig.base_points;
     let logMsg = `เช็คชื่อรายวัน (Day ${newCount})`;
 
-    // เช็คโบนัส
+    // เช็คโบนัส Milestone
     const milestone = streakConfig.milestones.find(m => m.days === newCount);
     if (milestone) {
         pointsToAdd += milestone.bonus;
         logMsg += ` + โบนัส ${milestone.days} วัน!`;
-        // เอฟเฟกต์แสดงความยินดี (ถ้ามี)
         alert(`🎉 ยินดีด้วย! คุณเช็คชื่อครบ ${newCount} วัน ได้รับโบนัส ${milestone.bonus} แต้ม!`);
     }
 
     try {
         const batch = writeBatch(db);
-        batch.update(sRef, {
-            points: increment(pointsToAdd),
-            streak_data: { count: newCount, max: newMax, last_claim: serverTimestamp() }
-        });
         
+        // 1. ✅ ประกาศตัวแปร updates (สำคัญมาก! ต้องมีบรรทัดนี้)
+        const updates = {
+            streak_data: { count: newCount, max: newMax, last_claim: serverTimestamp() }
+        };
+
+        // 2. 🔥 เช็คใบเตือนเพื่ออายัดแต้ม
+        // (ใช้ warning_cards ตามระบบใหม่ที่เราเพิ่งเปลี่ยน)
+        const warningCount = sData.warning_cards || 0;
+        
+        if (warningCount > 0) {
+            // กรณีมีใบเตือน -> เข้าแต้มอายัด (Pending)
+            updates.pending_points = increment(pointsToAdd);
+            logMsg += ` (ถูกอายัดจากใบเตือน ${warningCount} ใบ)`;
+            
+            // แจ้งเตือนนักเรียน
+            setTimeout(() => {
+                alert(`⚠️ คุณมีใบเตือน ${warningCount} ใบ!\nแต้มความขยัน ${pointsToAdd} แต้ม ถูกอายัดชั่วคราว จนกว่าจะล้างโทษหมดครับ`);
+            }, 500);
+            
+        } else {
+            // กรณีปกติ -> เข้ากระเป๋าหลักทันที
+            updates.points = increment(pointsToAdd);
+        }
+
+        // 3. สั่งอัปเดตข้อมูลนักเรียน
+        batch.update(sRef, updates);
+        
+        // 4. บันทึกประวัติ
         const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
         batch.set(hRef, {
             student_id: sData.student_id,
@@ -553,9 +580,18 @@ window.claimDailyStreak = async () => {
         });
 
         await batch.commit();
-        showToast(`✅ เช็คชื่อสำเร็จ! +${pointsToAdd} แต้ม`);
-        // renderStudentDashboard จะทำงานอัตโนมัติผ่าน onSnapshot
-    } catch(e) { console.error(e); alert('Error: ' + e.message); }
+        
+        // แสดงผล Toast
+        if (warningCount > 0) {
+            showToast(`✅ เช็คชื่อสำเร็จ (แต้มถูกอายัด)`);
+        } else {
+            showToast(`✅ เช็คชื่อสำเร็จ! +${pointsToAdd} แต้ม`);
+        }
+
+    } catch(e) { 
+        console.error(e); 
+        alert('Error: ' + e.message); 
+    }
 };
 
 
@@ -7847,4 +7883,3 @@ window.renderStudentGuild = () => {
         </div>
     `;
 };
-
