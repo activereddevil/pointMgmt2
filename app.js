@@ -659,7 +659,7 @@ function subscribeToData() {
                     // จัดกลุ่มรายการ
                     if (h.type === 'add_points') addedList.push(h);
                     else if (h.type === 'remove_points') removedList.push(h);
-                    else if (h.type === 'red_card') redCardList.push(h);
+                    
                 }
             });
 
@@ -719,8 +719,10 @@ function subscribeToData() {
             document.getElementById('interest-rate-display').textContent = (config.interest_rate || 1.0).toFixed(2) + '%';
             const homeIntDisplay = document.getElementById('home-interest-display');
                 if(homeIntDisplay) homeIntDisplay.textContent = (config.interest_rate || 1.0).toFixed(2);
+                
             const stdIntDisplay = document.getElementById('student-interest-display');
                 if(stdIntDisplay) stdIntDisplay.textContent = (config.interest_rate || 1.0).toFixed(2);
+
             if (userRole === 'teacher') {
                  // Check if focused to avoid overwriting while typing
                 
@@ -728,18 +730,6 @@ function subscribeToData() {
 const elInterest = document.getElementById('new-interest-rate');
 if (elInterest && document.activeElement.id !== 'new-interest-rate') {
     elInterest.value = config.interest_rate || 1.0;
-}
-
-// 2. อัปเดตค่าปรับใบแดง (🔥 ตัวต้นเหตุ: ใส่ if ดักไว้ กัน Error)
-const elDeduct = document.getElementById('points-per-red-card');
-if (elDeduct && document.activeElement.id !== 'points-per-red-card') {
-    elDeduct.value = config.deduct_rate || 0;
-}
-
-// 3. อัปเดตค่าล้างใบแดง (🔥 ใส่ if ดักไว้เช่นกัน)
-const elClear = document.getElementById('points-to-clear-red-card');
-if (elClear && document.activeElement.id !== 'points-to-clear-red-card') {
-    elClear.value = config.clear_rate || 0;
 }
 
 // 4. อัปเดตตั้งค่ากิลด์ (เป้าหมายของเรา ✅)
@@ -1568,7 +1558,7 @@ window.handleAddStudent = async (e) => {
         full_name: document.getElementById('add-std-name').value,
         class_name: document.getElementById('add-std-class').value,
         points: 0,
-        red_cards: 0,
+        warning_cards: 0,
         bank_points: 0,
         bank_deposit_time: serverTimestamp(),
         redeemed_history: {} 
@@ -1599,7 +1589,7 @@ window.handleCSVImport = async () => {
         const parts = line.split(/[\t,]+/).map(p => p.trim());
         if (parts.length < 2) continue; // Basic validation
         
-        const [stdId, name, className, points, redCards] = parts;
+        const [stdId, name, className, points, warnings] = parts;
         
         // Validate data
         if (!stdId || !name) continue;
@@ -1614,7 +1604,7 @@ window.handleCSVImport = async () => {
             full_name: name,
             class_name: className || '-',
             points: parseInt(points) || 0,
-            red_cards: parseInt(redCards) || 0,
+            warning_cards: parseInt(warnings) || 0,
             bank_points: 0,
             bank_deposit_time: serverTimestamp(),
             redeemed_history: {}
@@ -1732,7 +1722,7 @@ window.handlePointsSubmit = async (e) => {
     if(isNaN(amount) || amount < 1) return alert('จำนวนต้องมากกว่า 0');
     
     const reason = document.getElementById('points-reason').value;
-    const { type, isBulk, isRedCard, id } = currentPointAction;
+    const { type, isBulk,  id } = currentPointAction;
     
     const timestamp = serverTimestamp();
     const batch = writeBatch(db);
@@ -1756,19 +1746,7 @@ window.handlePointsSubmit = async (e) => {
         const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
         const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
         
-        if (isRedCard) {
-            const change = type === 'add' ? amount : -amount;
-            batch.update(sRef, { red_cards: increment(change) });
-            batch.set(hRef, {
-                student_id: s.id,
-                student_name: s.full_name,
-                action: type === 'add' ? 'ได้รับใบแดง' : 'ลบใบแดง',
-                amount: amount,
-                reason: reason,
-                type: 'red_card',
-                timestamp: timestamp
-            });
-        } else {
+        
             let finalAmount = amount;
             let logAction = type === 'add' ? 'ได้รับแต้ม' : 'ถูกหักแต้ม';
 
@@ -1798,7 +1776,7 @@ window.handlePointsSubmit = async (e) => {
                 type: type === 'add' ? 'add_points' : 'remove_points',
                 timestamp: timestamp
             });
-        }
+        
     });
      
      
@@ -3923,13 +3901,19 @@ window.confirmRedeemAction = async () => {
     const reward = redeemTarget;
     const student = selectedStudentForRedeem;
     const totalCost = qty * reward.actualPrice; // ราคาหลังหักส่วนลด
-    
+    // ✅ เช็คแค่ Warning Cards (ใบเตือน) อย่างเดียว
+    const warningCount = student.warning_cards || 0;
+    // อนุญาตให้แลกได้เฉพาะของที่เป็น "ไอเทมล้างโทษ" (remove_warning)
+    const isCureItem = reward.effect === 'remove_warning';
     const isUnlimited = reward.stock === -1;
+
     // เช็คว่าเป็นกาชาหรือไม่ (รองรับทั้ง type เก่าและใหม่)
     const isGacha = reward.type === 'gacha_custom' || reward.type === 'random_box'; 
 
     // 2. ตรวจสอบความพร้อม (Basic Check)
-    if (student.red_cards > 0 && reward.effect !== 'remove_redcard') return alert('❌ มีใบแดงติดตัว แลกของไม่ได้ครับ');
+    if (warningCount > 0 && !isCureItem) {
+        return alert(`❌ นักเรียนมีใบเตือน (${warningCount} ใบ) ติดตัว \nไม่สามารถแลกของรางวัลทั่วไปได้ครับ`);
+    }
     if (student.points < totalCost) return alert('❌ แต้มไม่พอครับ');
     if (!isUnlimited && reward.stock < qty) return alert(`❌ ของหมด (เหลือ ${reward.stock} ชิ้น)`);
 
