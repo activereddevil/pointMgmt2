@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.26</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.26.2</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -304,7 +304,7 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4 border-t border-slate-700 pt-4">
                     <div>
-                        <div class="text-xs text-slate-500">เงินสดคงเหลือ</div>
+                        <div class="text-xs text-slate-500">แต้มคงเหลือ</div>
                         <div class="font-bold text-lg text-green-400 flex items-center gap-1">
                             <span id="stock-cash-balance">0</span> 🪙
                         </div>
@@ -875,6 +875,9 @@
                     <button onclick="addNewStockPrompt()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-700">
                         + เพิ่มหุ้นใหม่ (IPO)
                     </button>
+                    <button onclick="openBatchDividendModal()" class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:shadow-orange-200 hover:shadow-lg transition-all flex items-center gap-2 shadow-sm">
+                        <span>💰</span> จ่ายปันผลหมู่ (Batch)
+                    </button>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -892,6 +895,9 @@
                         <h4 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
                             📢 กิจกรรมล่าสุด (Live Feed)
                         </h4>
+                        <button onclick="clearAllStockHistory()" class="text-xs text-red-400 hover:text-red-600 font-bold underline transition-colors" title="ล้างรายการทั้งหมด">
+                            ล้างประวัติ
+                        </button>
                         <div id="market-activity-log" class="flex-1 overflow-y-auto max-h-60 space-y-3 pr-2 custom-scrollbar">
                             <div class="text-center text-gray-400 text-sm mt-10">กำลังโหลดข้อมูล...</div>
                         </div>
@@ -2171,6 +2177,44 @@
                 <span>🚀</span> นำหุ้นเข้าตลาด (Launch IPO)
             </button>
         </form>
+    </div>
+</div>
+
+<div id="batch-dividend-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[70] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden transform transition-all scale-100 border border-slate-200 flex flex-col max-h-[90vh]">
+        
+        <div class="bg-gradient-to-r from-amber-500 to-orange-500 p-5 text-white flex justify-between items-center shrink-0">
+            <h3 class="font-bold text-xl flex items-center gap-2">
+                <span class="text-2xl">💰</span> จ่ายปันผลหมู่ (Batch Dividend)
+            </h3>
+            <button onclick="closeBatchDividendModal()" class="text-white/80 hover:text-white transition-colors text-3xl leading-none">&times;</button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto custom-scrollbar bg-slate-50 flex-1">
+            <div class="bg-blue-50 text-blue-700 p-4 rounded-xl text-sm mb-5 border border-blue-100 flex items-start gap-3 shadow-sm">
+                <span class="text-xl">💡</span>
+                <div class="leading-relaxed">
+                    <strong>วิธีใช้งาน:</strong> เลือกหุ้นที่ต้องการ แล้วระบุ <u>จำนวนแต้มต่อ 1 หุ้น</u> (เช่น 5 แต้ม) <br>
+                    ระบบจะคำนวณและโอนแต้มให้นักเรียนทุกคนที่ถือหุ้นนั้นโดยอัตโนมัติ
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider bg-white rounded-t-xl border-b border-slate-100">
+                <div class="col-span-1 text-center">เลือก</div>
+                <div class="col-span-6">ชื่อหุ้น</div>
+                <div class="col-span-5">เงินปันผล (แต้ม/หุ้น)</div>
+            </div>
+            
+            <div class="space-y-2 mt-2" id="batch-dividend-list">
+                </div>
+        </div>
+
+        <div class="p-5 border-t border-gray-100 bg-white shrink-0 flex justify-end gap-3">
+            <button onclick="closeBatchDividendModal()" class="px-5 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-colors">ยกเลิก</button>
+            <button onclick="confirmBatchDividend()" class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-200 hover:shadow-orange-300 hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                <span>🚀</span> ยืนยันการจ่ายปันผล
+            </button>
+        </div>
     </div>
 </div>
 
