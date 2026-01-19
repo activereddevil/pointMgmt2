@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.26.2</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.27</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -878,6 +878,9 @@
                     <button onclick="openBatchDividendModal()" class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:shadow-orange-200 hover:shadow-lg transition-all flex items-center gap-2 shadow-sm">
                         <span>💰</span> จ่ายปันผลหมู่ (Batch)
                     </button>
+                    <button onclick="openPortfolioInspector()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 hover:shadow-indigo-200 transition-all flex items-center gap-2 shadow-sm">
+                        <span>🕵️</span> ส่องพอร์ตนักเรียน
+                    </button>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -906,7 +909,7 @@
 
                 <div id="teacher-stock-summary" class="mb-4"></div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left">
+                    <table class="w-full text-sm text-left min-w-[600px]">
                         <thead class="bg-gray-50 text-gray-500 uppercase font-bold text-xs">
                             <tr>
                                 <th class="px-4 py-3 rounded-l-lg">Symbol</th>
@@ -2213,6 +2216,38 @@
             <button onclick="closeBatchDividendModal()" class="px-5 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-colors">ยกเลิก</button>
             <button onclick="confirmBatchDividend()" class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-200 hover:shadow-orange-300 hover:-translate-y-0.5 transition-all flex items-center gap-2">
                 <span>🚀</span> ยืนยันการจ่ายปันผล
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="portfolio-inspector-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[70] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden transform transition-all scale-100 border border-slate-200 flex flex-col max-h-[90vh]">
+        
+        <div class="bg-indigo-600 p-5 text-white flex justify-between items-center shrink-0">
+            <h3 class="font-bold text-xl flex items-center gap-2">
+                <span>🕵️</span> ส่องพอร์ตการลงทุน (Portfolio Inspector)
+            </h3>
+            <button onclick="document.getElementById('portfolio-inspector-modal').classList.add('hidden'); document.getElementById('portfolio-inspector-modal').classList.remove('flex');" class="text-white/80 hover:text-white transition-colors text-3xl leading-none">&times;</button>
+        </div>
+        
+        <div class="p-0 overflow-y-auto custom-scrollbar bg-slate-50 flex-1">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-indigo-50 text-indigo-900 font-bold text-sm uppercase sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th class="p-4 w-1/4">ชื่อนักเรียน</th>
+                        <th class="p-4 w-1/4 text-right">มูลค่าพอร์ตรวม</th>
+                        <th class="p-4 w-1/2">รายละเอียดหุ้นที่ถือ (Holdings)</th>
+                    </tr>
+                </thead>
+                <tbody id="portfolio-inspector-list" class="divide-y divide-slate-200 text-sm text-slate-700 bg-white">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="p-4 border-t border-gray-100 bg-white shrink-0 text-right">
+            <button onclick="document.getElementById('portfolio-inspector-modal').classList.add('hidden'); document.getElementById('portfolio-inspector-modal').classList.remove('flex');" class="px-6 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">
+                ปิดหน้าต่าง
             </button>
         </div>
     </div>
