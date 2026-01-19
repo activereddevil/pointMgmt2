@@ -8943,3 +8943,69 @@ window.confirmBatchDividend = async () => {
         alert("เกิดข้อผิดพลาด: " + err.message);
     }
 };
+
+// ==========================================
+// 🕵️ ระบบส่องพอร์ต (Portfolio Inspector)
+// ==========================================
+window.openPortfolioInspector = () => {
+    const modal = document.getElementById('portfolio-inspector-modal');
+    const list = document.getElementById('portfolio-inspector-list');
+    
+    if (!modal || !list) return;
+
+    // 1. ดึงเฉพาะคนที่มีพอร์ตหุ้น
+    const investors = students.filter(s => s.portfolio && s.portfolio.length > 0);
+    
+    // 2. คำนวณมูลค่าและจัดเรียง (รวยสุดขึ้นก่อน)
+    const data = investors.map(s => {
+        let totalVal = 0;
+        const details = s.portfolio.map(p => {
+            const stock = stocks.find(st => st.symbol === p.symbol);
+            if (!stock) return null; // เผื่อหุ้นถูกลบไปแล้ว
+            const val = p.amount * stock.price;
+            totalVal += val;
+            return {
+                symbol: p.symbol,
+                amount: p.amount,
+                price: stock.price,
+                icon: stock.icon || '📄'
+            };
+        }).filter(d => d !== null); // กรองหุ้นที่หาไม่เจอทิ้ง
+
+        return { ...s, totalVal, details };
+    });
+
+    // เรียงตามมูลค่าพอร์ต (มาก -> น้อย)
+    data.sort((a, b) => b.totalVal - a.totalVal);
+
+    if (data.length === 0) {
+        list.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-slate-400">ยังไม่มีนักเรียนคนไหนลงทุนในตลาดหุ้นครับ 🦗</td></tr>`;
+    } else {
+        list.innerHTML = data.map(s => `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="p-4 font-bold text-slate-800 border-r border-slate-100">
+                    ${s.full_name}
+                    <div class="text-[10px] text-slate-400 font-normal">${s.student_id}</div>
+                </td>
+                <td class="p-4 text-right font-mono font-bold text-indigo-600 border-r border-slate-100">
+                    ${s.totalVal.toLocaleString()}
+                    <span class="text-[10px] text-slate-400 font-sans block">แต้ม</span>
+                </td>
+                <td class="p-4">
+                    <div class="flex flex-wrap gap-2">
+                        ${s.details.map(d => `
+                            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-sm text-xs">
+                                <span class="text-base">${d.icon}</span>
+                                <span class="font-bold text-slate-700">${d.symbol}</span>
+                                <span class="bg-slate-100 px-1.5 rounded text-slate-500 font-mono">x${d.amount}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
