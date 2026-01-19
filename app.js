@@ -331,6 +331,7 @@ async function initAppUI() {
     loadQuestCategories();
     loadRewardCategories();
     loadStreakConfig(); // โหลดค่าตั้งค่าเช็คชื่อ
+    subscribeToStocks();
     
     // Clear previous intervals if any
     if (window.interestInterval) clearInterval(window.interestInterval);
@@ -607,6 +608,7 @@ function setupNavigation() {
             <button onclick="switchTab('home')" id="tab-home" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-red-500 text-red-600">รายชื่อนักเรียน</button>
             <button onclick="switchTab('punishment')" id="tab-punishment" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">⚠️ คุมประพฤติ</button>
             <button onclick="switchTab('guilds')" id="tab-guilds" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">🏰 กิลด์</button>
+            <button onclick="switchTab('stocks')" id="tab-stocks-btn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">📈 ตลาดหุ้น</button>
             <button onclick="switchTab('groups')" id="tab-btn-groups" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">👥 จัดกลุ่ม</button>
             <button onclick="switchTab('quests')" id="tab-quests" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ภารกิจ</button>
             
@@ -7991,5 +7993,300 @@ window.saveAnnouncement = async () => {
     } catch (e) {
         console.error(e);
         alert('Error: ' + e.message);
+    }
+};
+
+// ==========================================
+// 📈 ระบบตลาดหุ้น (Stock Market System)
+// ==========================================
+let stocks = [];
+let currentTradeStock = null;
+let currentTradeMode = 'buy'; // 'buy' or 'sell'
+const MARKET_FEE_PERCENT = 0.03; // ค่าธรรมเนียม 3%
+
+// Subscribe ข้อมูลหุ้น (ใส่ใน initSystem หรือ subscribeToData)
+function subscribeToStocks() {
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'stocks'), orderBy('symbol'));
+    onSnapshot(q, (snapshot) => {
+        stocks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // ถ้าอยู่ในหน้าหุ้น ให้รีเฟรชหน้าจอ
+        if (document.getElementById('tab-stocks').classList.contains('hidden') === false) {
+            renderStockMarket();
+        }
+        // ถ้าเป็นครู ให้รีเฟรชตารางคุม
+        if (userRole === 'teacher') {
+            renderTeacherStockControl();
+        }
+    });
+}
+// อย่าลืมเรียก subscribeToStocks() ใน initSystem() ด้วยนะครับ!
+
+window.renderStockMarket = () => {
+    const list = document.getElementById('stock-market-list');
+    if (!list) return;
+    
+    // คำนวณพอร์ต
+    const myPortfolio = currentStudentData.portfolio || [];
+    let totalPortfolioValue = 0;
+    
+    // 1. วาดการ์ดหุ้น
+    list.innerHTML = stocks.map(stock => {
+        const holding = myPortfolio.find(p => p.symbol === stock.symbol);
+        const holdAmount = holding ? holding.amount : 0;
+        const currentVal = holdAmount * stock.price;
+        totalPortfolioValue += currentVal;
+
+        // คำนวณการเปลี่ยนแปลงราคา
+        const change = stock.price - (stock.prev_price || stock.price);
+        const changePercent = stock.prev_price ? ((change / stock.prev_price) * 100).toFixed(1) : 0;
+        const colorClass = change >= 0 ? 'text-green-500' : 'text-red-500';
+        const sign = change >= 0 ? '+' : '';
+
+        return `
+        <div onclick="openTradeModal('${stock.id}')" class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden">
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-2xl border border-gray-200">
+                        ${stock.icon || '📈'}
+                    </div>
+                    <div>
+                        <div class="font-bold text-gray-800 text-lg leading-tight">${stock.symbol}</div>
+                        <div class="text-xs text-gray-500">${stock.name}</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="font-bold text-xl text-slate-800">${stock.price}</div>
+                    <div class="text-xs font-bold ${colorClass}">${sign}${change} (${sign}${changePercent}%)</div>
+                </div>
+            </div>
+            
+            ${holdAmount > 0 ? `
+            <div class="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center text-sm">
+                <span class="text-gray-500">ถือครอง:</span>
+                <span class="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">${holdAmount} หุ้น</span>
+            </div>
+            ` : ''}
+            
+            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+        </div>
+        `;
+    }).join('');
+
+    // 2. อัปเดตสรุปพอร์ตด้านบน
+    document.getElementById('stock-cash-balance').textContent = currentStudentData.points.toLocaleString();
+    document.getElementById('portfolio-total-value').textContent = totalPortfolioValue.toLocaleString();
+    
+    const holdingCount = myPortfolio.filter(p => p.amount > 0).length;
+    document.getElementById('stock-count-hold').textContent = `${holdingCount} รายการ`;
+    
+    // คำนวณ P/L รวม (กำไร/ขาดทุน)
+    // (ต้องเก็บต้นทุนเฉลี่ยไว้ใน Portfolio ถึงจะคำนวณแม่นยำ แต่นี่เอาแบบคร่าวๆ ไปก่อน)
+};
+
+window.openTradeModal = (stockId) => {
+    currentTradeStock = stocks.find(s => s.id === stockId);
+    if (!currentTradeStock) return;
+
+    document.getElementById('trade-stock-name').textContent = `${currentTradeStock.symbol} - ${currentTradeStock.name}`;
+    document.getElementById('trade-stock-icon').textContent = currentTradeStock.icon || '📈';
+    document.getElementById('trade-stock-price').textContent = currentTradeStock.price;
+    
+    // Reset Modal
+    document.getElementById('trade-qty').value = 1;
+    setTradeMode('buy'); // Default buy
+    
+    document.getElementById('stock-trade-modal').classList.remove('hidden');
+    document.getElementById('stock-trade-modal').classList.add('flex');
+    calculateTradeTotal();
+};
+
+window.closeTradeModal = () => {
+    document.getElementById('stock-trade-modal').classList.add('hidden');
+    document.getElementById('stock-trade-modal').classList.remove('flex');
+};
+
+window.setTradeMode = (mode) => {
+    currentTradeMode = mode;
+    const btnBuy = document.getElementById('btn-mode-buy');
+    const btnSell = document.getElementById('btn-mode-sell');
+    const btnConfirm = document.getElementById('btn-trade-confirm');
+    
+    if (mode === 'buy') {
+        btnBuy.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-white shadow text-green-600";
+        btnSell.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-red-600";
+        btnConfirm.className = "w-full py-3 rounded-xl font-bold text-white bg-green-500 hover:bg-green-600 shadow-lg shadow-green-200";
+        btnConfirm.textContent = "ยืนยันการซื้อ (Buy)";
+        
+        // Max Buy
+        const max = Math.floor(currentStudentData.points / (currentTradeStock.price * (1 + MARKET_FEE_PERCENT)));
+        document.getElementById('trade-max-label').textContent = `ซื้อได้สูงสุด: ${max}`;
+    } else {
+        btnBuy.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-green-600";
+        btnSell.className = "flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-white shadow text-red-600";
+        btnConfirm.className = "w-full py-3 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200";
+        btnConfirm.textContent = "ยืนยันการขาย (Sell)";
+
+        // Max Sell
+        const holding = (currentStudentData.portfolio || []).find(p => p.symbol === currentTradeStock.symbol);
+        const max = holding ? holding.amount : 0;
+        document.getElementById('trade-max-label').textContent = `ขายได้สูงสุด: ${max}`;
+    }
+    calculateTradeTotal();
+};
+
+window.adjustTradeQty = (delta) => {
+    const input = document.getElementById('trade-qty');
+    let val = parseInt(input.value) + delta;
+    if (val < 1) val = 1;
+    input.value = val;
+    calculateTradeTotal();
+};
+
+window.calculateTradeTotal = () => {
+    const qty = parseInt(document.getElementById('trade-qty').value) || 0;
+    const price = currentTradeStock.price;
+    const rawTotal = qty * price;
+    
+    // คิดค่าธรรมเนียมเฉพาะตอนซื้อ (หรือขายด้วยแล้วแต่กติกา) -> อันนี้เอาแบบมาตรฐาน: ซื้อเสีย/ขายเสีย
+    const fee = Math.ceil(rawTotal * MARKET_FEE_PERCENT);
+    const total = currentTradeMode === 'buy' ? rawTotal + fee : rawTotal - fee;
+    
+    document.getElementById('trade-total-price').textContent = total.toLocaleString();
+    document.getElementById('trade-fee').textContent = fee.toLocaleString();
+};
+
+window.executeTrade = async () => {
+    if (!currentTradeStock || !currentStudentData) return;
+    
+    const qty = parseInt(document.getElementById('trade-qty').value);
+    const price = currentTradeStock.price;
+    const rawTotal = qty * price;
+    const fee = Math.ceil(rawTotal * MARKET_FEE_PERCENT);
+    const totalAmount = currentTradeMode === 'buy' ? rawTotal + fee : rawTotal - fee;
+
+    const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id);
+    const myPortfolio = currentStudentData.portfolio || [];
+    const stockIndex = myPortfolio.findIndex(p => p.symbol === currentTradeStock.symbol);
+    
+    try {
+        const batch = writeBatch(db);
+
+        if (currentTradeMode === 'buy') {
+            if (currentStudentData.points < totalAmount) return alert('แต้มไม่พอครับ!');
+
+            // หักเงิน
+            batch.update(sRef, { points: increment(-totalAmount) });
+
+            // เพิ่มหุ้นเข้าพอร์ต
+            let newPortfolio = [...myPortfolio];
+            if (stockIndex > -1) {
+                newPortfolio[stockIndex].amount += qty;
+                // คำนวณต้นทุนเฉลี่ยใหม่ (ถ้าจะทำลึกซึ้ง)
+            } else {
+                newPortfolio.push({ symbol: currentTradeStock.symbol, amount: qty });
+            }
+            batch.update(sRef, { portfolio: newPortfolio });
+            
+            showToast(`ซื้อ ${currentTradeStock.symbol} สำเร็จ! (-${totalAmount})`);
+
+        } else { // SELL
+            if (stockIndex === -1 || myPortfolio[stockIndex].amount < qty) return alert('หุ้นไม่พอขายครับ!');
+
+            // เพิ่มเงิน
+            batch.update(sRef, { points: increment(totalAmount) });
+
+            // ลดหุ้นออกจากพอร์ต
+            let newPortfolio = [...myPortfolio];
+            newPortfolio[stockIndex].amount -= qty;
+            if (newPortfolio[stockIndex].amount <= 0) {
+                newPortfolio.splice(stockIndex, 1); // หมดแล้วลบทิ้ง
+            }
+            batch.update(sRef, { portfolio: newPortfolio });
+            
+            showToast(`ขาย ${currentTradeStock.symbol} สำเร็จ! (+${totalAmount})`);
+        }
+
+        // บันทึก History
+        const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+        batch.set(hRef, {
+            student_id: currentStudentData.student_id,
+            student_name: currentStudentData.full_name,
+            action: `${currentTradeMode === 'buy' ? 'ซื้อ' : 'ขาย'}หุ้น ${currentTradeStock.symbol} x${qty}`,
+            amount: totalAmount,
+            type: 'stock_trade',
+            timestamp: serverTimestamp()
+        });
+
+        await batch.commit();
+        closeTradeModal();
+        
+    } catch(e) { console.error(e); alert(e.message); }
+};
+
+window.renderTeacherStockControl = () => {
+    const tbody = document.getElementById('teacher-stock-list');
+    if (!tbody) return;
+
+    tbody.innerHTML = stocks.map(stock => `
+        <tr class="border-b hover:bg-gray-50">
+            <td class="px-4 py-3 font-bold text-gray-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">${stock.icon || ''}</span>
+                    ${stock.symbol}
+                </div>
+            </td>
+            <td class="px-4 py-3 text-lg font-bold text-indigo-600">${stock.price}</td>
+            <td class="px-4 py-3">
+                <div class="flex gap-1">
+                    <button onclick="updateStockPrice('${stock.id}', -5)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs">-5</button>
+                    <button onclick="updateStockPrice('${stock.id}', -1)" class="px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100 font-bold text-xs">-1</button>
+                    <button onclick="updateStockPrice('${stock.id}', 1)" class="px-2 py-1 bg-green-50 text-green-500 rounded hover:bg-green-100 font-bold text-xs">+1</button>
+                    <button onclick="updateStockPrice('${stock.id}', 5)" class="px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 font-bold text-xs">+5</button>
+                </div>
+            </td>
+            <td class="px-4 py-3 text-right">
+                <button onclick="deleteStock('${stock.id}')" class="text-gray-400 hover:text-red-500">&times;</button>
+            </td>
+        </tr>
+    `).join('');
+};
+
+window.addNewStockPrompt = async () => {
+    const symbol = prompt("ชื่อย่อหุ้น (เช่น EDU, CLEAN):");
+    if (!symbol) return;
+    const name = prompt("ชื่อเต็มบริษัท:", `บริษัท ${symbol} จำกัด`);
+    const price = parseInt(prompt("ราคา IPO เริ่มต้น:", "100"));
+    const icon = prompt("ไอคอน (Emoji):", "🏢");
+
+    const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'stocks'));
+    await setDoc(ref, {
+        symbol: symbol.toUpperCase(),
+        name: name,
+        price: price,
+        prev_price: price,
+        icon: icon,
+        created_at: serverTimestamp()
+    });
+};
+
+window.updateStockPrice = async (stockId, delta) => {
+    const stock = stocks.find(s => s.id === stockId);
+    if (!stock) return;
+
+    const newPrice = Math.max(1, stock.price + delta); // ห้ามต่ำกว่า 1
+    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'stocks', stockId);
+    
+    // อัปเดตราคา + เก็บราคาเก่าไว้คำนวณ % Change
+    await updateDoc(ref, {
+        price: newPrice,
+        prev_price: stock.price, // เก็บราคาเดิมไว้เทียบ
+        last_update: serverTimestamp()
+    });
+};
+
+window.deleteStock = async (stockId) => {
+    if(confirm('ยืนยันลบหุ้นตัวนี้? (พอร์ตนักเรียนที่ถืออยู่จะค้างนะครับ เตือนเด็กขายก่อนลบ)')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stocks', stockId));
     }
 };
