@@ -2937,11 +2937,77 @@ window.showToast = (msg) => {
 
 window.filterStudents = renderStudentList;
 
-window.deleteStudent = async (id) => {
-    if(confirm('ยืนยันลบนักเรียนคนนี้?')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', id));
+// 1. ฟังก์ชันลบนักเรียน (แบบถอนรากถอนโคน)
+window.deleteStudent = async (docId) => {
+    try {
+        const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', docId);
+        const sSnap = await getDoc(studentRef);
+        
+        if (!sSnap.exists()) return alert('ไม่พบข้อมูลนักเรียน');
+        const sData = sSnap.data();
+        
+        if(!confirm(`⚠️ ยืนยันลบนักเรียน "${sData.full_name}"?\n\n(ระบบจะลบข้อมูลพอร์ตหุ้น และประวัติการใช้งานทั้งหมดของคนนี้ออกด้วย)`)) return;
+
+        const batch = writeBatch(db);
+        
+        // 1. ลบเอกสารข้อมูลนักเรียน
+        batch.delete(studentRef);
+
+        // 2. ลบประวัติทั้งหมด (History) ที่เกี่ยวข้องกับรหัสนักเรียนนี้
+        if (sData.student_id) {
+            // ค้นหา History ทุกอันที่เป็นของเด็กคนนี้
+            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'history'), 
+                           where('student_id', '==', sData.student_id));
+            
+            const historySnaps = await getDocs(q);
+            historySnaps.forEach(hDoc => {
+                batch.delete(hDoc.ref);
+            });
+        }
+
+        await batch.commit();
+        showToast(`ลบนักเรียน ${sData.full_name} และประวัติเรียบร้อยแล้ว`);
+
+    } catch (e) {
+        console.error(e);
+        alert('เกิดข้อผิดพลาด: ' + e.message);
     }
-}
+};
+
+// 2. ฟังก์ชันล้าง Live Feed ทั้งหมด (Clear All)
+window.clearAllStockHistory = async () => {
+    if(!confirm('⚠️ ยืนยัน "ล้างกระดาน Live Feed" ทั้งหมด?\n\n(ประวัติการซื้อขาย/ปันผล ในหน้า Live Feed จะหายไปทั้งหมด แต่พอร์ตหุ้นของนักเรียนจะยังอยู่ปกตินะครับ)')) return;
+    
+    try {
+        // ลบเฉพาะ History ที่เกี่ยวกับหุ้น (stock_trade, dividend, stock_delist)
+        const typesToDelete = ['stock_trade', 'dividend', 'stock_delist'];
+        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'history'), 
+                       where('type', 'in', typesToDelete));
+        
+        const snaps = await getDocs(q);
+        
+        // หมายเหตุ: Batch ลบได้ทีละ 500 ถ้าประวัติเยอะมากอาจต้องวนลูป แต่สำหรับห้องเรียน Batch เดียวเอาอยู่ครับ
+        const batch = writeBatch(db);
+        let count = 0;
+
+        snaps.forEach(doc => {
+            batch.delete(doc.ref);
+            count++;
+        });
+        
+        if (count === 0) return alert('ไม่มีประวัติให้ลบครับ');
+
+        await batch.commit();
+        alert(`✅ ล้างประวัติไปทั้งหมด ${count} รายการเรียบร้อย!`);
+        
+        // รีเฟรชหน้าจอทันที
+        if(window.renderMarketActivity) renderMarketActivity();
+
+    } catch (e) {
+        console.error(e);
+        alert('เกิดข้อผิดพลาด: ' + e.message);
+    }
+};
 
 window.confirmBulkDelete = () => {
     if (selectedStudentIds.size === 0) return alert('กรุณาเลือกนักเรียนก่อน');
@@ -8710,4 +8776,170 @@ window.applyManualPrice = (stockId) => {
     
     // เคลียร์ค่าทิ้ง เตรียมรับค่าใหม่
     input.value = ''; 
+};
+
+// ==========================================
+// 💰 ระบบจ่ายปันผลหมู่ (Batch Dividend)
+// ==========================================
+
+// 1. เปิด Modal และสร้างรายการหุ้น
+window.openBatchDividendModal = () => {
+    const modal = document.getElementById('batch-dividend-modal');
+    const listContainer = document.getElementById('batch-dividend-list');
+    
+    if (!modal || !listContainer) return;
+    
+    // สร้างรายการหุ้นแบบ Checkbox
+    listContainer.innerHTML = stocks.map(stock => `
+        <div class="grid grid-cols-12 gap-4 items-center p-3 bg-white border border-slate-200 rounded-xl hover:border-amber-300 transition-colors shadow-sm group">
+            <div class="col-span-1 flex justify-center">
+                <input type="checkbox" 
+                       id="batch-div-check-${stock.id}" 
+                       onchange="toggleBatchDividendInput('${stock.id}')"
+                       class="w-5 h-5 accent-amber-500 cursor-pointer">
+            </div>
+            
+            <div class="col-span-6 flex items-center gap-3 opacity-50 group-hover:opacity-100 transition-opacity" id="batch-div-info-${stock.id}">
+                <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-xl border border-slate-100 shadow-sm">
+                    ${stock.icon || '📈'}
+                </div>
+                <div>
+                    <div class="font-bold text-slate-700 leading-tight">${stock.symbol}</div>
+                    <div class="text-[10px] text-slate-400 truncate max-w-[120px]">${stock.name}</div>
+                </div>
+            </div>
+            
+            <div class="col-span-5">
+                <div class="relative">
+                    <input type="number" 
+                           id="batch-div-rate-${stock.id}" 
+                           disabled
+                           placeholder="0" 
+                           class="w-full pl-3 pr-8 py-2 border-2 border-slate-100 rounded-lg text-right font-bold text-slate-700 disabled:bg-slate-50 disabled:text-slate-300 focus:border-amber-500 focus:bg-amber-50 outline-none transition-all"
+                    >
+                    <div class="absolute right-3 top-2 text-xs font-bold text-slate-400 pointer-events-none">P</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+// 2. ปิด Modal
+window.closeBatchDividendModal = () => {
+    const modal = document.getElementById('batch-dividend-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+};
+
+// 3. เปิด/ปิด ช่องกรอกตาม Checkbox
+window.toggleBatchDividendInput = (stockId) => {
+    const checkbox = document.getElementById(`batch-div-check-${stockId}`);
+    const input = document.getElementById(`batch-div-rate-${stockId}`);
+    const info = document.getElementById(`batch-div-info-${stockId}`);
+    
+    if (checkbox && input) {
+        input.disabled = !checkbox.checked;
+        
+        if (checkbox.checked) {
+            info.classList.remove('opacity-50');
+            input.value = '5'; // ค่า Default 5 แต้ม
+            input.focus();
+            input.select();
+        } else {
+            info.classList.add('opacity-50');
+            input.value = '';
+        }
+    }
+};
+
+// 4. ยืนยันการแจกปันผล (หัวใจหลัก 💖)
+window.confirmBatchDividend = async () => {
+    // รวบรวมข้อมูลหุ้นที่เลือก
+    const payouts = [];
+    stocks.forEach(stock => {
+        const checkbox = document.getElementById(`batch-div-check-${stock.id}`);
+        const input = document.getElementById(`batch-div-rate-${stock.id}`);
+        
+        if (checkbox && checkbox.checked) {
+            const rate = parseInt(input.value);
+            if (!isNaN(rate) && rate > 0) {
+                payouts.push({ id: stock.id, symbol: stock.symbol, rate: rate });
+            }
+        }
+    });
+
+    if (payouts.length === 0) return alert("กรุณาเลือกหุ้นและระบุจำนวนเงินปันผลอย่างน้อย 1 รายการครับ");
+
+    // คำนวณยอดรวมเพื่อยืนยัน
+    let grandTotal = 0;
+    students.forEach(s => {
+        if (!s.portfolio) return;
+        payouts.forEach(p => {
+            const holding = s.portfolio.find(h => h.symbol === p.symbol);
+            if (holding && holding.amount > 0) {
+                grandTotal += holding.amount * p.rate;
+            }
+        });
+    });
+
+    const msg = `💰 สรุปยอดการจ่ายปันผล:\n` +
+                payouts.map(p => `- ${p.symbol}: ${p.rate} แต้ม/หุ้น`).join('\n') +
+                `\n\n--------------------------------\n` +
+                `รวมยอดจ่ายทั้งหมด: ${grandTotal.toLocaleString()} แต้ม\n` +
+                `ยืนยันที่จะดำเนินการหรือไม่?`;
+
+    if (!confirm(msg)) return;
+
+    try {
+        const batch = writeBatch(db);
+        let txCount = 0;
+
+        // วนลูปแจกเงินนักเรียนทีละคน
+        students.forEach(s => {
+            if (!s.portfolio) return;
+            
+            let receivedTotal = 0;
+            let details = [];
+
+            payouts.forEach(p => {
+                const holding = s.portfolio.find(h => h.symbol === p.symbol);
+                if (holding && holding.amount > 0) {
+                    const amount = holding.amount * p.rate;
+                    receivedTotal += amount;
+                    details.push(`${p.symbol} (${amount})`);
+                }
+            });
+
+            if (receivedTotal > 0) {
+                // 1. เพิ่มเงินให้นักเรียน
+                const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
+                batch.update(sRef, { points: increment(receivedTotal) });
+
+                // 2. บันทึกประวัติ (รวมยอดทีเดียว เพื่อประหยัด Database)
+                const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+                batch.set(hRef, {
+                    student_id: s.student_id,
+                    student_name: s.full_name,
+                    action: `รับปันผลหมู่: ${details.join(', ')}`,
+                    amount: receivedTotal,
+                    type: 'dividend_batch',
+                    timestamp: serverTimestamp()
+                });
+                txCount++;
+            }
+        });
+
+        await batch.commit();
+        closeBatchDividendModal();
+        alert(`✅ จ่ายปันผลเรียบร้อย!\nมีนักเรียนได้รับเงินทั้งหมด: ${txCount} คน`);
+        
+    } catch (err) {
+        console.error(err);
+        alert("เกิดข้อผิดพลาด: " + err.message);
+    }
 };
