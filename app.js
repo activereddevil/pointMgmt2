@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, setDoc, updateDoc, deleteDoc, doc, getDoc, onSnapshot, query, where, getDocs, increment, serverTimestamp, writeBatch, arrayUnion, arrayRemove, deleteField, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";    // --- Firebase Config (Auto-injected by Canvas) ---
+import { getFirestore, collection, addDoc, setDoc, updateDoc, deleteDoc, doc, getDoc, onSnapshot, query, where, getDocs, increment, serverTimestamp, writeBatch, arrayUnion, arrayRemove, deleteField, runTransaction, orderBy } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";    // --- Firebase Config (Auto-injected by Canvas) ---
 const firebaseConfig = {
 apiKey: "AIzaSyCt1hOqcgf8fGmPVtvrPztwzMQZvlrETfY",
 authDomain: "pointmgmt-b8b87.firebaseapp.com",
@@ -608,7 +608,7 @@ function setupNavigation() {
             <button onclick="switchTab('home')" id="tab-home" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-red-500 text-red-600">รายชื่อนักเรียน</button>
             <button onclick="switchTab('punishment')" id="tab-punishment" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">⚠️ คุมประพฤติ</button>
             <button onclick="switchTab('guilds')" id="tab-guilds" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">🏰 กิลด์</button>
-            <button onclick="switchTab('stocks')" id="tab-stocks-btn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">📈 ตลาดหุ้น</button>
+            
             <button onclick="switchTab('groups')" id="tab-btn-groups" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">👥 จัดกลุ่ม</button>
             <button onclick="switchTab('quests')" id="tab-quests" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ภารกิจ</button>
             
@@ -630,6 +630,9 @@ function setupNavigation() {
             <button onclick="switchTab('student-dashboard')" id="tab-student-dashboard" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-red-500 text-red-600">หน้าหลัก</button>
             <button onclick="switchTab('rewards')" id="tab-rewards" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ของรางวัล</button>
             <button onclick="switchTab('student-guild')" id="tab-student-guild" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">🏰 กิลด์</button>
+            <button onclick="switchTab('stocks')" id="tab-stocks-btn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all flex items-center gap-2">
+            📈 ตลาดหุ้น
+        </button> 
         `;
         document.getElementById('teacher-reward-controls').classList.add('hidden');
         document.getElementById('teacher-history-controls').classList.add('hidden');
