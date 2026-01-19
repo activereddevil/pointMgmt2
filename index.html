@@ -280,9 +280,12 @@
                     <!-- History items -->
                 </div>
             </div>
+
+           
         </div>
         <div id="content-student-guild" class="tab-content hidden h-full flex flex-col space-y-6">
         </div>
+
 
         
 
@@ -531,6 +534,96 @@
             </div>
         </div>
 
+        <!-- STOCK TAB -->
+        <div id="tab-stocks" class="tab-content hidden space-y-6 animate-fade-in-up">
+    
+            <div class="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+                <div class="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
+                    <svg class="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                </div>
+                <h3 class="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">มูลค่าพอร์ตลงทุน (Portfolio Value)</h3>
+                <div class="flex items-end gap-3 mb-4">
+                    <span id="portfolio-total-value" class="text-4xl font-bold">0</span>
+                    <span class="text-sm text-slate-400 mb-2">แต้ม</span>
+                    <span id="portfolio-pnl" class="mb-2 text-sm font-bold px-2 py-0.5 rounded bg-slate-700">0%</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 border-t border-slate-700 pt-4">
+                    <div>
+                        <div class="text-xs text-slate-500">เงินสดคงเหลือ</div>
+                        <div class="font-bold text-lg text-green-400 flex items-center gap-1">
+                            <span id="stock-cash-balance">0</span> 🪙
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">หุ้นที่ถือครอง</div>
+                        <div class="font-bold text-lg text-blue-400" id="stock-count-hold">0 รายการ</div>
+                    </div>
+                </div>
+            </div>
+        
+            <div>
+                <h3 class="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
+                    📊 กระดานซื้อขาย (Market)
+                </h3>
+                <div id="stock-market-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    </div>
+            </div>
+        </div>
+        
+        <div id="stock-trade-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all scale-100">
+                <div class="bg-slate-900 p-4 text-white flex justify-between items-center">
+                    <h3 class="font-bold text-lg flex items-center gap-2">
+                        <span id="trade-stock-icon" class="text-2xl"></span>
+                        <span id="trade-stock-name">Stock Name</span>
+                    </h3>
+                    <button onclick="closeTradeModal()" class="text-slate-400 hover:text-white">&times;</button>
+                </div>
+                
+                <div class="p-6">
+                    <div class="text-center mb-6">
+                        <div class="text-gray-500 text-sm">ราคาปัจจุบัน</div>
+                        <div class="text-4xl font-bold text-slate-800 flex justify-center items-center gap-1">
+                            <span id="trade-stock-price">100</span>
+                            <span class="text-lg text-slate-400">แต้ม</span>
+                        </div>
+                        <div id="trade-stock-change" class="text-sm font-bold mt-1"></div>
+                    </div>
+        
+                    <div class="flex bg-gray-100 rounded-xl p-1 mb-6">
+                        <button onclick="setTradeMode('buy')" id="btn-mode-buy" class="flex-1 py-2 rounded-lg font-bold text-sm transition-all bg-white shadow text-green-600">ซื้อ (Buy)</button>
+                        <button onclick="setTradeMode('sell')" id="btn-mode-sell" class="flex-1 py-2 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-red-600">ขาย (Sell)</button>
+                    </div>
+        
+                    <div class="space-y-4">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-500">จำนวนที่ต้องการ:</span>
+                            <span class="font-bold" id="trade-max-label">Max: 0</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="adjustTradeQty(-1)" class="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold text-xl">-</button>
+                            <input type="number" id="trade-qty" value="1" min="1" class="flex-1 h-10 text-center font-bold border-gray-200 border rounded-xl" oninput="calculateTradeTotal()">
+                            <button onclick="adjustTradeQty(1)" class="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 font-bold text-xl">+</button>
+                        </div>
+                        
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs text-gray-500">รวมเป็นเงิน</span>
+                                <span id="trade-total-price" class="font-bold text-lg text-indigo-600">0</span>
+                            </div>
+                            <div class="flex justify-between items-center text-[10px] text-gray-400">
+                                <span>ค่าธรรมเนียม (3%)</span>
+                                <span id="trade-fee">0</span>
+                            </div>
+                        </div>
+        
+                        <button onclick="executeTrade()" id="btn-trade-confirm" class="w-full py-3 rounded-xl font-bold text-white bg-green-500 hover:bg-green-600 shadow-lg shadow-green-200 transition-all transform active:scale-95">
+                            ยืนยันคำสั่งซื้อ
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
         
 
         <!-- ============ REWARDS TAB (UPDATED) ============ -->
@@ -820,6 +913,33 @@
     </div>
 </div>
 
+<div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mt-6">
+    <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        📈 ควบคุมตลาดหุ้น (Market Maker)
+    </h3>
+    
+    <div class="mb-4">
+        <button onclick="addNewStockPrompt()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-700">
+            + เพิ่มหุ้นใหม่ (IPO)
+        </button>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+            <thead class="bg-gray-50 text-gray-500 uppercase font-bold text-xs">
+                <tr>
+                    <th class="px-4 py-3 rounded-l-lg">Symbol</th>
+                    <th class="px-4 py-3">Price</th>
+                    <th class="px-4 py-3">Control</th>
+                    <th class="px-4 py-3 rounded-r-lg text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody id="teacher-stock-list">
+                </tbody>
+        </table>
+    </div>
+</div>
+
 
                 </div> 
             </div>
@@ -971,14 +1091,15 @@
             </div>
 
             <div class="px-5 pb-3">
+                <div class="flex justify-between items-end mt-1 px-1">
+                    <p class="text-[10px] text-gray-400">* เลือกรายชื่อด้านล่างเพื่อเพิ่ม/ลบสมาชิก</p>
+                    <p class="text-[10px] text-indigo-500 font-bold cursor-pointer hover:underline" onclick="toggleGuildSelection('all')">เลือกทั้งหมด</p>
+               </div>
                 <div class="relative">
                     <input type="text" id="search-student-guild" placeholder="🔍 ค้นหาชื่อนักเรียนเพื่อเพิ่มเข้ากิลด์..." class="w-full pl-10 pr-4 py-2.5 bg-gray-100 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm font-bold" oninput="renderGuildMembersSelect()">
                     <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <div class="flex justify-between items-end mt-1 px-1">
-                     <p class="text-[10px] text-gray-400">* เลือกรายชื่อด้านล่างเพื่อเพิ่ม/ลบสมาชิก</p>
-                     <p class="text-[10px] text-indigo-500 font-bold cursor-pointer hover:underline" onclick="toggleGuildSelection('all')">เลือกทั้งหมด</p>
-                </div>
+                
             </div>
         </div>
 
