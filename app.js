@@ -738,9 +738,17 @@ function subscribeToData() {
         if (userRole === 'teacher') renderHistory(false);
         if (userRole === 'teacher') {
             const teacherStockTab = document.getElementById('content-teacher-stocks');
-            if (teacherStockTab && !teacherStockTab.classList.contains('hidden')) renderMarketActivity();
+            if (teacherStockTab && !teacherStockTab.classList.contains('hidden')) 
+                renderMarketActivity();   
+                renderTeacherStockControl();
+             
         }
-        if (userRole === 'student') renderStudentDashboard();
+        if (userRole === 'student') 
+            renderStudentDashboard();
+            const stockTab = document.getElementById('content-stocks');
+                if (stockTab && !stockTab.classList.contains('hidden')) {
+                    renderStockMarket();
+                }
     }, onError));
     
     unsubscribers.push(onSnapshot(collections.config(), (snapshot) => {
@@ -8128,6 +8136,7 @@ window.renderStockMarket = () => {
         const changePercent = stock.prev_price ? ((change / stock.prev_price) * 100).toFixed(1) : 0;
         const colorClass = change >= 0 ? 'text-green-500' : 'text-red-500';
         const sign = change >= 0 ? '+' : '';
+       
 
         return `
         <div onclick="openTradeModal('${stock.id}')" class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden">
@@ -8148,14 +8157,21 @@ window.renderStockMarket = () => {
             </div>
             
             ${holdAmount > 0 ? `
-            <div class="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center text-sm">
+            <div class="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center text-sm">
                 <span class="text-gray-500">ถือครอง:</span>
                 <span class="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">${holdAmount} หุ้น</span>
             </div>
             ` : ''}
+
+            <div class="mt-3 text-center">
+                <span class="text-xs font-bold text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    🛒 กดเพื่อซื้อ/ขาย
+                </span>
+            </div>
             
             <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
         </div>
+    
         `;
     }).join('');
 
@@ -8177,6 +8193,11 @@ window.openTradeModal = (stockId) => {
     document.getElementById('trade-stock-name').textContent = `${currentTradeStock.symbol} - ${currentTradeStock.name}`;
     document.getElementById('trade-stock-icon').textContent = currentTradeStock.icon || '📈';
     document.getElementById('trade-stock-price').textContent = currentTradeStock.price;
+
+    const descEl = document.getElementById('trade-stock-desc');
+    if (descEl) {
+        descEl.textContent = currentTradeStock.description || 'ไม่มีข้อมูลบริษัท';
+    }
     
     // Reset Modal
     document.getElementById('trade-qty').value = 1;
@@ -8243,6 +8264,9 @@ window.calculateTradeTotal = () => {
 };
 
 window.executeTrade = async () => {
+    if (config.market_status === 'closed') {
+        return alert('⛔ ขณะนี้ตลาดหุ้น "ปิดทำการ" ครับ\n\n(ครูผู้สอนได้ปิดระบบการซื้อขายชั่วคราว)');
+    }
     if (!currentTradeStock || !currentStudentData) return;
     
     const qty = parseInt(document.getElementById('trade-qty').value);
@@ -8312,14 +8336,16 @@ window.executeTrade = async () => {
 
 window.renderTeacherStockControl = () => {
     const tbody = document.getElementById('teacher-stock-list');
+    const summaryDiv = document.getElementById('teacher-stock-summary'); // จุดที่จะวางปุ่มปิด/เปิดตลาด
+    
     if (!tbody) return;
 
+    // ==========================================
     // 1. คำนวณภาพรวมตลาด (Market Overview)
+    // ==========================================
     let totalMarketCap = 0;
     let richList = [];
-    let recentTx = []; // รายการเทรดล่าสุด (ต้องดึงจาก history จริงๆ แต่นับจาก portfolio เอาก่อนแบบคร่าวๆ)
 
-    // วนลูปนักเรียนทุกคนเพื่อหาเศรษฐีหุ้น
     students.forEach(s => {
         if (s.portfolio && s.portfolio.length > 0) {
             let portVal = 0;
@@ -8334,46 +8360,67 @@ window.renderTeacherStockControl = () => {
         }
     });
 
-    // เรียงลำดับคนรวยสุด 3 อันดับแรก
     richList.sort((a, b) => b.val - a.val);
     const topInvestors = richList.slice(0, 3);
 
-    // สร้าง HTML สรุป (แทรกไว้เหนือตารางหุ้น)
-    const summaryHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    // ==========================================
+    // 2. สร้าง HTML ส่วนสรุป + ปุ่มปิด/เปิดตลาด
+    // ==========================================
+    
+    // 2.1 การ์ดสรุปยอด (Summary Cards)
+    const summaryCardsHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
                 <div class="text-xs font-bold text-indigo-400 uppercase">มูลค่าตลาดรวม</div>
                 <div class="text-2xl font-bold text-indigo-700">${totalMarketCap.toLocaleString()} แต้ม</div>
-                <div class="text-xs text-indigo-500 mt-1">จำนวนนักลงทุน: ${richList.length} คน</div>
+                <div class="text-xs text-indigo-500 mt-1">นักลงทุน: ${richList.length} คน</div>
             </div>
-
             <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 col-span-2">
-                <div class="text-xs font-bold text-emerald-600 uppercase mb-2">🏆 นักลงทุนรายใหญ่ (Top Investors)</div>
+                <div class="text-xs font-bold text-emerald-600 uppercase mb-2">🏆 เศรษฐีหุ้น (Top 3)</div>
                 <div class="flex gap-4 overflow-x-auto">
                     ${topInvestors.length > 0 ? topInvestors.map((inv, i) => `
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-emerald-100 shadow-sm">
                             <span class="text-xs font-bold bg-emerald-100 text-emerald-600 w-5 h-5 flex items-center justify-center rounded-full">${i+1}</span>
                             <div>
                                 <div class="text-sm font-bold text-gray-700">${inv.name}</div>
-                                <div class="text-[10px] text-gray-500">พอร์ต: ${inv.val.toLocaleString()}</div>
+                                <div class="text-[10px] text-gray-500">${inv.val.toLocaleString()}</div>
                             </div>
                         </div>
-                    `).join('') : '<div class="text-sm text-gray-400 italic">ยังไม่มีนักลงทุน...</div>'}
+                    `).join('') : '<div class="text-sm text-gray-400 italic">ยังไม่มีข้อมูล...</div>'}
                 </div>
             </div>
         </div>
     `;
 
-    // 2. แสดงผล (Insert Summary + Render Table)
-    // เราต้องหา Container ของตารางเพื่อแทรก Summary ก่อน (อาจต้องแก้ HTML เพิ่มนิดหน่อยถ้าจะให้สวยเป๊ะ แต่ใช้วิธีแทรกก่อน table ก็ได้)
-    
-    // (หมายเหตุ: เพื่อความง่าย ผมขออนุญาตแสดง Summary ผ่าน console หรือ alert ก่อนในเวอร์ชันนี้ 
-    // หรือถ้าจะให้ดี คุณออฟต้องไปเพิ่ม <div id="stock-summary"></div> ใน index.html เหนือตารางครับ)
-    
-    // แต่วิธีที่ง่ายที่สุดตอนนี้คือ -> วาดตารางหุ้นเหมือนเดิม (แต่แอบ Console.log ให้ครูดูเบื้องหลัง)
-    console.log("📊 สรุปตลาดหุ้น:", { totalMarketCap, topInvestors });
+    // 2.2 แถบปุ่มปิด/เปิดตลาด (Market Status Toggle)
+    const isMarketOpen = !config.market_status || config.market_status === 'open';
+    const statusText = isMarketOpen ? '🟢 ตลาดเปิดทำการ' : '🔴 ตลาดปิดปรับปรุง';
+    const btnColor = isMarketOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600';
+    const btnText = isMarketOpen ? 'สั่งปิดตลาด' : 'สั่งเปิดตลาด';
 
-    // --- วาดตารางหุ้น (เหมือนโค้ดเดิม) ---
+    const toggleHeaderHTML = `
+        <div class="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <div>
+                <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">📈 ควบคุมตลาดหุ้น</h3>
+                <div class="text-xs ${isMarketOpen ? 'text-green-600' : 'text-red-600'} font-bold mt-1">${statusText}</div>
+            </div>
+            <button onclick="toggleMarketStatus()" class="${btnColor} text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all active:scale-95">
+                ${btnText}
+            </button>
+        </div>
+    `;
+
+    // 2.3 รวมร่างและแสดงผล
+    if (summaryDiv) {
+        summaryDiv.innerHTML = summaryCardsHTML + toggleHeaderHTML;
+    }
+
+    // ==========================================
+    // 3. วาดกราฟและตาราง (เหมือนเดิม)
+    // ==========================================
+    renderMarketChart();    
+    renderMarketActivity(); 
+
     tbody.innerHTML = stocks.map(stock => `
         <tr class="border-b hover:bg-gray-50">
             <td class="px-4 py-3 font-bold text-gray-800 align-top">
@@ -8381,56 +8428,38 @@ window.renderTeacherStockControl = () => {
                     <span class="text-xl">${stock.icon || ''}</span>
                     <div class="flex flex-col">
                         <span>${stock.symbol}</span>
+                        <button onclick="openEditStockModal('${stock.id}')" class="text-slate-400 hover:text-indigo-600 transition-colors" title="แก้ไขข้อมูลหุ้น">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        </button>
                         <span class="text-[10px] text-gray-400 font-normal">${stock.name}</span>
                     </div>
                 </div>
             </td>
             <td class="px-4 py-3 text-lg font-bold text-indigo-600 align-top">${stock.price}</td>
-            
             <td class="px-4 py-3 align-top">
                 <div class="flex flex-col gap-2">
                     <div class="flex gap-1 flex-wrap">
-                        <button onclick="updateStockPrice('${stock.id}', -5)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs transition-colors">-5</button>
-                        <button onclick="updateStockPrice('${stock.id}', -3)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs transition-colors">-3</button>
-                        <button onclick="updateStockPrice('${stock.id}', -1)" class="px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100 font-bold text-xs transition-colors">-1</button>
-                        <button onclick="updateStockPrice('${stock.id}', 1)" class="px-2 py-1 bg-green-50 text-green-500 rounded hover:bg-green-100 font-bold text-xs transition-colors">+1</button>
-                        <button onclick="updateStockPrice('${stock.id}', 3)" class="px-2 py-1 bg-green-50 text-green-500 rounded hover:bg-green-100 font-bold text-xs transition-colors">+3</button>
-                        <button onclick="updateStockPrice('${stock.id}', 5)" class="px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 font-bold text-xs transition-colors">+5</button>
+                        <button onclick="updateStockPrice('${stock.id}', -5)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs">-5</button>
+                        <button onclick="updateStockPrice('${stock.id}', -3)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs">-3</button>
+                        <button onclick="updateStockPrice('${stock.id}', -1)" class="px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100 font-bold text-xs">-1</button>
+                        <button onclick="updateStockPrice('${stock.id}', 1)" class="px-2 py-1 bg-green-50 text-green-500 rounded hover:bg-green-100 font-bold text-xs">+1</button>
+                        <button onclick="updateStockPrice('${stock.id}', 3)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs">+3</button>
+                        <button onclick="updateStockPrice('${stock.id}', 5)" class="px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 font-bold text-xs">+5</button>
                     </div>
-
                     <div class="flex gap-1">
-                        <input type="number" 
-                               id="manual-adj-${stock.id}" 
-                               placeholder="+/-" 
-                               class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:border-indigo-500 outline-none transition-all"
-                               onkeypress="if(event.key === 'Enter') applyManualPrice('${stock.id}')">
-                        <button onclick="applyManualPrice('${stock.id}')" 
-                                class="px-3 py-1 bg-slate-800 text-white rounded hover:bg-slate-700 font-bold text-xs transition-colors shadow-sm">
-                            OK
-                        </button>
+                        <input type="number" id="manual-adj-${stock.id}" placeholder="+/-" class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none" onkeypress="if(event.key === 'Enter') applyManualPrice('${stock.id}')">
+                        <button onclick="applyManualPrice('${stock.id}')" class="px-3 py-1 bg-slate-800 text-white rounded hover:bg-slate-700 font-bold text-xs">OK</button>
                     </div>
                 </div>
             </td>
-            
             <td class="px-4 py-3 text-right align-top">
                 <div class="flex justify-end gap-2">
-                    <button onclick="distributeDividend('${stock.id}', '${stock.symbol}')" 
-                            class="px-3 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 font-bold text-xs flex items-center gap-1 transition-colors">
-                        💰 ปันผล
-                    </button>
-                    <button onclick="deleteStock('${stock.id}')" class="text-gray-400 hover:text-red-500 text-xl transition-colors">&times;</button>
+                    <button onclick="distributeDividend('${stock.id}', '${stock.symbol}')" class="px-3 py-1 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 font-bold text-xs flex items-center gap-1">💰 ปันผล</button>
+                    <button onclick="deleteStock('${stock.id}')" class="text-gray-400 hover:text-red-500 text-xl">&times;</button>
                 </div>
             </td>
         </tr>
     `).join('');
-
-    
-    // ถ้ามี div สำหรับสรุป ให้แสดงผลด้วย (เผื่อคุณออฟไปเพิ่มมา)
-    const summaryDiv = document.getElementById('teacher-stock-summary');
-    if (summaryDiv) summaryDiv.innerHTML = summaryHTML;
-
-    renderMarketChart();    // วาดกราฟ
-    renderMarketActivity(); // โหลดประวัติการซื้อขาย
 };
 
 // 1. เปิด Modal สวยๆ แทน Prompt เดิม
@@ -8465,6 +8494,7 @@ window.confirmAddStock = async (e) => {
     const name = document.getElementById('stock-name').value.trim();
     const price = parseInt(document.getElementById('stock-price').value);
     const icon = document.getElementById('stock-icon').value.trim() || '🏢';
+    const desc = document.getElementById('stock-desc').value.trim(); // รับค่ารายละเอียด
 
     if (!symbol || !name || isNaN(price) || price <= 0) {
         return alert('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
@@ -8475,6 +8505,7 @@ window.confirmAddStock = async (e) => {
         await setDoc(ref, {
             symbol: symbol,
             name: name,
+            description: desc,
             price: price,
             prev_price: price, // ราคาตั้งต้น = ราคาปัจจุบัน
             icon: icon,
@@ -8485,6 +8516,7 @@ window.confirmAddStock = async (e) => {
         const modal = document.getElementById('add-stock-modal');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
+        document.getElementById('stock-desc').value = '';
         
         showToast(`✅ นำหุ้น ${symbol} เข้าตลาดเรียบร้อย!`);
     } catch (err) {
@@ -8981,17 +9013,35 @@ window.openPortfolioInspector = () => {
     if (data.length === 0) {
         list.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-slate-400">ยังไม่มีนักเรียนคนไหนลงทุนในตลาดหุ้นครับ 🦗</td></tr>`;
     } else {
-        list.innerHTML = data.map(s => `
-            <tr class="hover:bg-slate-50 transition-colors">
-                <td class="p-4 font-bold text-slate-800 border-r border-slate-100">
-                    ${s.full_name}
-                    <div class="text-[10px] text-slate-400 font-normal">${s.student_id}</div>
+        list.innerHTML = data.map(s => {
+            // เช็คว่ามีชื่อพอร์ตไหม ถ้าไม่มีใช้ default
+        const portName = s.portfolio_name || 'พอร์ตการลงทุนทั่วไป';
+        const portDesc = s.portfolio_desc ? `<div class="text-[10px] text-slate-500 mt-1 italic line-clamp-1">"${s.portfolio_desc}"</div>` : '';
+
+        return `
+            <tr class="hover:bg-slate-50 transition-colors group">
+                <td class="p-4 border-r border-slate-100 align-top">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-bold text-slate-800">${s.full_name}</div>
+                            <div class="text-[10px] text-slate-400 mb-1">${s.student_id}</div>
+                            
+                            <div class="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded font-bold border border-indigo-100">
+                                📝 ${portName}
+                            </div>
+                            ${portDesc}
+                        </div>
+                        
+                        <button onclick="openPortfolioEditor('${s.id}')" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600 p-1 transition-all" title="แก้ไขชื่อพอร์ต">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        </button>
+                    </div>
                 </td>
-                <td class="p-4 text-right font-mono font-bold text-indigo-600 border-r border-slate-100">
+                
+                <td class="p-4 text-right font-mono font-bold text-indigo-600 border-r border-slate-100 align-top">
                     ${s.totalVal.toLocaleString()}
-                    <span class="text-[10px] text-slate-400 font-sans block">แต้ม</span>
                 </td>
-                <td class="p-4">
+                <td class="p-4 align-top">
                     <div class="flex flex-wrap gap-2">
                         ${s.details.map(d => `
                             <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-sm text-xs">
@@ -9003,9 +9053,147 @@ window.openPortfolioInspector = () => {
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `;}).join('');
     }
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+};
+
+// ==========================================
+// 🔴 ระบบเปิด/ปิดตลาด (Market Status)
+// ==========================================
+window.toggleMarketStatus = async () => {
+    // อ่านค่าปัจจุบัน (ถ้าไม่มีถือว่าเปิด)
+    const currentStatus = config.market_status || 'open';
+    const newStatus = currentStatus === 'open' ? 'closed' : 'open';
+    const msg = newStatus === 'open' ? '🟢 เปิดตลาดหุ้น' : '🔴 ปิดตลาดหุ้น';
+
+    if(!confirm(`ยืนยันการ "${msg}" ?\n\n(เมื่อปิดตลาด นักเรียนจะไม่สามารถส่งคำสั่งซื้อขายได้)`)) return;
+
+    try {
+        // บันทึกลง Config รวมของโรงเรียน
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'school_settings'), {
+            market_status: newStatus
+        }, { merge: true });
+        
+        showToast(`✅ ${msg} เรียบร้อยแล้ว`);
+    } catch (e) {
+        console.error(e);
+        alert('เกิดข้อผิดพลาด: ' + e.message);
+    }
+};
+
+// ==========================================
+// 📝 ระบบแก้ไขรายละเอียดพอร์ต (Name & Description)
+// ==========================================
+let editingStudentId = null;
+
+window.openPortfolioEditor = (docId) => {
+    const s = students.find(st => st.id === docId);
+    if (!s) return;
+
+    editingStudentId = docId;
+    
+    // แสดงชื่อนักเรียน
+    document.getElementById('edit-port-student-name').textContent = s.full_name;
+    
+    // ดึงข้อมูลเดิมมาใส่ (ถ้ามี)
+    document.getElementById('edit-port-name').value = s.portfolio_name || '';
+    document.getElementById('edit-port-desc').value = s.portfolio_desc || '';
+    
+    // เปิด Modal
+    const modal = document.getElementById('edit-portfolio-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.closePortfolioEditor = () => {
+    const modal = document.getElementById('edit-portfolio-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    editingStudentId = null;
+};
+
+window.savePortfolioDetails = async () => {
+    if (!editingStudentId) return;
+    
+    const name = document.getElementById('edit-port-name').value.trim();
+    const desc = document.getElementById('edit-port-desc').value.trim();
+    
+    try {
+        const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', editingStudentId);
+        
+        // อัปเดตแค่ชื่อและรายละเอียด (ไม่ยุ่งกับหุ้นในพอร์ต)
+        await updateDoc(sRef, { 
+            portfolio_name: name,
+            portfolio_desc: desc
+        });
+        
+        showToast(`บันทึกข้อมูลพอร์ตเรียบร้อย`);
+        closePortfolioEditor();
+        
+        // ถ้าเปิดหน้าส่องพอร์ตอยู่ ให้รีเฟรชข้อมูลด้วย
+        if(document.getElementById('portfolio-inspector-modal').classList.contains('flex')) {
+            openPortfolioInspector();
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert('บันทึกไม่สำเร็จ: ' + e.message);
+    }
+};
+
+// ==========================================
+// ✏️ ระบบแก้ไขหุ้น (Edit Stock Info)
+// ==========================================
+window.openEditStockModal = (stockId) => {
+    const stock = stocks.find(s => s.id === stockId);
+    if (!stock) return;
+
+    document.getElementById('edit-stock-id').value = stock.id;
+    document.getElementById('edit-stock-symbol').value = stock.symbol;
+    document.getElementById('edit-stock-name').value = stock.name;
+    document.getElementById('edit-stock-icon').value = stock.icon || '🏢';
+    document.getElementById('edit-stock-desc').value = stock.description || '';
+
+    const modal = document.getElementById('edit-stock-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.closeEditStockModal = () => {
+    const modal = document.getElementById('edit-stock-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+};
+
+window.confirmEditStock = async (e) => {
+    e.preventDefault();
+    
+    const id = document.getElementById('edit-stock-id').value;
+    const name = document.getElementById('edit-stock-name').value.trim();
+    const icon = document.getElementById('edit-stock-icon').value.trim();
+    const desc = document.getElementById('edit-stock-desc').value.trim();
+
+    if (!name) return alert('กรุณาระบุชื่อบริษัท');
+
+    try {
+        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'stocks', id);
+        await updateDoc(ref, {
+            name: name,
+            icon: icon,
+            description: desc
+        });
+        
+        showToast(`แก้ไขข้อมูลหุ้น ${document.getElementById('edit-stock-symbol').value} เรียบร้อย`);
+        closeEditStockModal();
+        
+        // รีเฟรชหน้าครู (ถ้าเปิดอยู่)
+        if(window.renderTeacherStockControl) renderTeacherStockControl();
+
+    } catch (err) {
+        console.error(err);
+        alert('แก้ไขไม่สำเร็จ: ' + err.message);
+    }
 };
