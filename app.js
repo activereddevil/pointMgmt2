@@ -9311,12 +9311,36 @@ window.updateBrokerPrice = () => {
 // คำนวณราคารวม
 window.updateBrokerTotal = () => {
     const select = document.getElementById('broker-stock-select');
-    const stock = stocks.find(s => s.id === select.value);
+    const action = document.getElementById('broker-action').value; // buy/sell
     const qty = parseInt(document.getElementById('broker-qty').value) || 0;
+    const stockId = select.value;
     
-    if (stock) {
-        const total = stock.price * qty;
-        document.getElementById('broker-total').textContent = total.toLocaleString();
+    // หาข้อมูลหุ้น
+    const stock = stocks.find(s => s.id === stockId);
+    
+    if (stock && qty > 0) {
+        const rawAmount = stock.price * qty;
+        const fee = Math.floor(rawAmount * 0.03); // ค่าธรรมเนียม 3%
+        let netAmount = 0;
+        let text = '';
+
+        if (action === 'buy') {
+            netAmount = rawAmount + fee; // ซื้อ: ราคาของ + ค่าธรรมเนียม
+            text = `${netAmount.toLocaleString()} (รวม Fee ${fee})`;
+            
+            // เปลี่ยนสีตัวเลข
+            document.getElementById('broker-total').className = 'text-xl font-bold text-red-600'; 
+        } else {
+            netAmount = rawAmount - fee; // ขาย: ราคาของ - ค่าธรรมเนียม
+            text = `${netAmount.toLocaleString()} (หัก Fee ${fee})`;
+            
+            // เปลี่ยนสีตัวเลข
+            document.getElementById('broker-total').className = 'text-xl font-bold text-green-600';
+        }
+
+        document.getElementById('broker-total').textContent = text;
+    } else {
+        document.getElementById('broker-total').textContent = '0';
     }
 };
 
@@ -9333,9 +9357,25 @@ window.confirmBrokerTrade = async () => {
 
     const stock = stocks.find(s => s.id === stockId);
     const student = students.find(s => s.id === studentDocId);
-    const totalAmount = stock.price * qty;
+    
+    // 1. คำนวณยอดเงินและค่าธรรมเนียม
+    const rawAmount = stock.price * qty;
+    const fee = Math.floor(rawAmount * 0.03); // 3%
+    let netAmount = 0;
+    let logAction = '';
 
-    if (!confirm(`ยืนยันการ ${action === 'buy' ? 'ซื้อ' : 'ขาย'} หุ้น ${stock.symbol} จำนวน ${qty} หุ้น\nให้กับ ${student.full_name} ?`)) return;
+    if (action === 'buy') {
+        netAmount = rawAmount + fee; // จ่ายเพิ่ม
+    } else {
+        netAmount = rawAmount - fee; // ได้น้อยลง
+    }
+
+    // ข้อความยืนยัน
+    const confirmMsg = action === 'buy' 
+        ? `ซื้อหุ้น ${stock.symbol} x${qty}\nราคาหุ้น: ${rawAmount}\nค่าธรรมเนียม: ${fee}\nรวมจ่ายสุทธิ: ${netAmount} แต้ม`
+        : `ขายหุ้น ${stock.symbol} x${qty}\nมูลค่าหุ้น: ${rawAmount}\nหักค่าธรรมเนียม: ${fee}\nได้รับสุทธิ: ${netAmount} แต้ม`;
+
+    if (!confirm(`ยืนยันทำรายการให้ ${student.full_name} ?\n\n${confirmMsg}`)) return;
 
     try {
         const batch = writeBatch(db);
@@ -9344,42 +9384,51 @@ window.confirmBrokerTrade = async () => {
         const stockIndex = newPortfolio.findIndex(p => p.symbol === stock.symbol);
 
         if (action === 'buy') {
-            // เช็คเงิน
-            if (student.points < totalAmount) return alert(`เงินนักเรียนไม่พอครับ (ขาด ${totalAmount - student.points} แต้ม)`);
+            // เช็คเงิน (ต้องพอจ่ายยอดสุทธิ)
+            if (student.points < netAmount) {
+                return alert(`เงินนักเรียนไม่พอครับ (มี ${student.points} / ต้องใช้ ${netAmount})`);
+            }
             
-            // หักเงิน + เพิ่มหุ้น
-            batch.update(sRef, { points: increment(-totalAmount) });
+            // หักเงิน
+            batch.update(sRef, { points: increment(-netAmount) });
             
+            // เพิ่มหุ้น
             if (stockIndex > -1) {
                 newPortfolio[stockIndex].amount += qty;
             } else {
                 newPortfolio.push({ symbol: stock.symbol, amount: qty });
             }
+            
+            logAction = `[ครูเทรด] ซื้อ ${stock.symbol} x${qty} (รวมค่าธรรมเนียม ${fee})`;
+
         } else {
-            // เช็คหุ้น (กรณีขาย)
+            // เช็คหุ้น
             if (stockIndex === -1 || newPortfolio[stockIndex].amount < qty) {
                 return alert('นักเรียนมีหุ้นไม่พอขายครับ');
             }
 
-            // เพิ่มเงิน + ลดหุ้น
-            batch.update(sRef, { points: increment(totalAmount) });
+            // เพิ่มเงิน
+            batch.update(sRef, { points: increment(netAmount) });
             
+            // ลดหุ้น
             newPortfolio[stockIndex].amount -= qty;
             if (newPortfolio[stockIndex].amount <= 0) {
-                newPortfolio.splice(stockIndex, 1); // หุ้นหมดลบทิ้ง
+                newPortfolio.splice(stockIndex, 1);
             }
+
+            logAction = `[ครูเทรด] ขาย ${stock.symbol} x${qty} (หักค่าธรรมเนียม ${fee})`;
         }
 
         // อัปเดตพอร์ต
         batch.update(sRef, { portfolio: newPortfolio });
 
-        // บันทึกประวัติ (History)
+        // บันทึกประวัติ
         const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
         batch.set(hRef, {
             student_id: student.student_id,
             student_name: student.full_name,
-            action: `[ครูเทรดให้] ${action === 'buy' ? 'ซื้อ' : 'ขาย'}หุ้น ${stock.symbol} x${qty}`,
-            amount: totalAmount,
+            action: logAction,
+            amount: netAmount,
             type: 'stock_trade_broker',
             timestamp: serverTimestamp()
         });
@@ -9387,7 +9436,10 @@ window.confirmBrokerTrade = async () => {
         await batch.commit();
         
         alert('✅ ทำรายการสำเร็จเรียบร้อย!');
-        closeBrokerModal();
+        closeBrokerModal(); // ปิดหน้าต่าง
+
+        // (Optional) รีเฟรชหน้าถ้าจำเป็น
+        if(window.renderBrokerStudentList) renderBrokerStudentList();
 
     } catch (e) {
         console.error(e);
