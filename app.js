@@ -8443,7 +8443,7 @@ window.renderTeacherStockControl = () => {
                         <button onclick="updateStockPrice('${stock.id}', -3)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs">-3</button>
                         <button onclick="updateStockPrice('${stock.id}', -1)" class="px-2 py-1 bg-red-50 text-red-500 rounded hover:bg-red-100 font-bold text-xs">-1</button>
                         <button onclick="updateStockPrice('${stock.id}', 1)" class="px-2 py-1 bg-green-50 text-green-500 rounded hover:bg-green-100 font-bold text-xs">+1</button>
-                        <button onclick="updateStockPrice('${stock.id}', 3)" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-bold text-xs">+3</button>
+                        <button onclick="updateStockPrice('${stock.id}', 3)" class="px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 font-bold text-xs">+3</button>
                         <button onclick="updateStockPrice('${stock.id}', 5)" class="px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 font-bold text-xs">+5</button>
                     </div>
                     <div class="flex gap-1">
@@ -8979,21 +8979,20 @@ window.confirmBatchDividend = async () => {
 // ==========================================
 // 🕵️ ระบบส่องพอร์ต (Portfolio Inspector)
 // ==========================================
+// ตัวแปรเก็บข้อมูลพอร์ตทั้งหมด (เพื่อใช้กรอง)
+let allPortfolioData = [];
+
 window.openPortfolioInspector = () => {
     const modal = document.getElementById('portfolio-inspector-modal');
-    const list = document.getElementById('portfolio-inspector-list');
     
-    if (!modal || !list) return;
-
-    // 1. ดึงเฉพาะคนที่มีพอร์ตหุ้น
+    // 1. คำนวณข้อมูลเตรียมไว้ครั้งเดียว (Cache Data)
     const investors = students.filter(s => s.portfolio && s.portfolio.length > 0);
     
-    // 2. คำนวณมูลค่าและจัดเรียง (รวยสุดขึ้นก่อน)
-    const data = investors.map(s => {
+    allPortfolioData = investors.map(s => {
         let totalVal = 0;
         const details = s.portfolio.map(p => {
             const stock = stocks.find(st => st.symbol === p.symbol);
-            if (!stock) return null; // เผื่อหุ้นถูกลบไปแล้ว
+            if (!stock) return null;
             const val = p.amount * stock.price;
             totalVal += val;
             return {
@@ -9002,19 +9001,39 @@ window.openPortfolioInspector = () => {
                 price: stock.price,
                 icon: stock.icon || '📄'
             };
-        }).filter(d => d !== null); // กรองหุ้นที่หาไม่เจอทิ้ง
+        }).filter(d => d !== null);
 
         return { ...s, totalVal, details };
     });
 
-    // เรียงตามมูลค่าพอร์ต (มาก -> น้อย)
-    data.sort((a, b) => b.totalVal - a.totalVal);
+    // เรียงลำดับ (รวยสุดขึ้นก่อน)
+    allPortfolioData.sort((a, b) => b.totalVal - a.totalVal);
 
-    if (data.length === 0) {
-        list.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-slate-400">ยังไม่มีนักเรียนคนไหนลงทุนในตลาดหุ้นครับ 🦗</td></tr>`;
-    } else {
-        list.innerHTML = data.map(s => {
-            // เช็คว่ามีชื่อพอร์ตไหม ถ้าไม่มีใช้ default
+    // 2. เคลียร์ช่องค้นหา
+    const searchInput = document.getElementById('portfolio-search-input');
+    if(searchInput) searchInput.value = '';
+
+    // 3. สั่งวาดตาราง
+    renderPortfolioList(allPortfolioData);
+
+    // 4. เปิด Modal
+    if(modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+// ฟังก์ชันวาดตาราง (แยกออกมาเพื่อให้เรียกซ้ำได้ตอนค้นหา)
+window.renderPortfolioList = (dataList) => {
+    const list = document.getElementById('portfolio-inspector-list');
+    if (!list) return;
+
+    if (dataList.length === 0) {
+        list.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-slate-400">ไม่พบข้อมูล... 🦗</td></tr>`;
+        return;
+    }
+
+    list.innerHTML = dataList.map(s => {
         const portName = s.portfolio_name || 'พอร์ตการลงทุนทั่วไป';
         const portDesc = s.portfolio_desc ? `<div class="text-[10px] text-slate-500 mt-1 italic line-clamp-1">"${s.portfolio_desc}"</div>` : '';
 
@@ -9025,19 +9044,16 @@ window.openPortfolioInspector = () => {
                         <div>
                             <div class="font-bold text-slate-800">${s.full_name}</div>
                             <div class="text-[10px] text-slate-400 mb-1">${s.student_id}</div>
-                            
                             <div class="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded font-bold border border-indigo-100">
                                 📝 ${portName}
                             </div>
                             ${portDesc}
                         </div>
-                        
                         <button onclick="openPortfolioEditor('${s.id}')" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600 p-1 transition-all" title="แก้ไขชื่อพอร์ต">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            ✏️
                         </button>
                     </div>
                 </td>
-                
                 <td class="p-4 text-right font-mono font-bold text-indigo-600 border-r border-slate-100 align-top">
                     ${s.totalVal.toLocaleString()}
                 </td>
@@ -9053,11 +9069,25 @@ window.openPortfolioInspector = () => {
                     </div>
                 </td>
             </tr>
-        `;}).join('');
+        `;
+    }).join('');
+};
+
+// ฟังก์ชันกรองรายชื่อ (ทำงานตอนพิมพ์)
+window.filterPortfolioList = () => {
+    const query = document.getElementById('portfolio-search-input').value.toLowerCase().trim();
+    
+    if (!query) {
+        renderPortfolioList(allPortfolioData); // ถ้าลบคำค้นหา ให้โชว์ทั้งหมด
+        return;
     }
 
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    const filtered = allPortfolioData.filter(s => 
+        s.full_name.toLowerCase().includes(query) || 
+        s.student_id.toString().includes(query)
+    );
+
+    renderPortfolioList(filtered);
 };
 
 // ==========================================
@@ -9195,5 +9225,172 @@ window.confirmEditStock = async (e) => {
     } catch (err) {
         console.error(err);
         alert('แก้ไขไม่สำเร็จ: ' + err.message);
+    }
+};
+
+// ==========================================
+// 🛒 ระบบ Broker Mode (ครูเทรดแทนนักเรียน)
+// ==========================================
+
+window.openBrokerModal = () => {
+    const modal = document.getElementById('broker-modal');
+    
+    // 1. เติมรายชื่อหุ้นลง Dropdown
+    const stockSelect = document.getElementById('broker-stock-select');
+    stockSelect.innerHTML = stocks.map(s => 
+        `<option value="${s.id}" data-price="${s.price}">${s.symbol} (${s.price})</option>`
+    ).join('');
+
+    // 2. เติมรายชื่อนักเรียน (โหลดครั้งแรก)
+    renderBrokerStudentList();
+    
+    // 3. รีเซ็ตค่าต่างๆ
+    document.getElementById('broker-action').value = 'buy';
+    document.getElementById('broker-qty').value = '1';
+    updateBrokerPrice(); // อัปเดตราคาเริ่มต้น
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.closeBrokerModal = () => {
+    document.getElementById('broker-modal').classList.add('hidden');
+    document.getElementById('broker-modal').classList.remove('flex');
+};
+
+// ฟังก์ชันค้นหาและสร้างรายชื่อนักเรียนใน Dropdown
+window.renderBrokerStudentList = () => {
+    const search = document.getElementById('broker-student-search').value.toLowerCase();
+    const select = document.getElementById('broker-student-select');
+    
+    // กรองและเรียงลำดับ
+    const filtered = students.filter(s => 
+        s.full_name.toLowerCase().includes(search) || 
+        s.student_id.toString().includes(search)
+    ).sort((a, b) => a.student_id - b.student_id);
+
+    select.innerHTML = '<option value="">-- เลือกนักเรียน --</option>' + 
+        filtered.map(s => `<option value="${s.id}">${s.student_id} - ${s.full_name}</option>`).join('');
+};
+
+// แสดงยอดเงินคงเหลือของนักเรียนที่เลือก
+window.updateBrokerPortfolioInfo = () => {
+    const studentId = document.getElementById('broker-student-select').value;
+    const infoBox = document.getElementById('broker-balance-info');
+    const cashSpan = document.getElementById('broker-student-cash');
+
+    if (!studentId) {
+        infoBox.classList.add('hidden');
+        return;
+    }
+
+    const s = students.find(st => st.id === studentId);
+    if (s) {
+        cashSpan.textContent = s.points.toLocaleString();
+        infoBox.classList.remove('hidden');
+    }
+};
+
+// อัปเดตราคาตลาดเมื่อเปลี่ยนหุ้น
+window.updateBrokerPrice = () => {
+    const select = document.getElementById('broker-stock-select');
+    const priceDisplay = document.getElementById('broker-current-price');
+    
+    // ดึงราคาจาก attribute data-price ที่ฝังไว้ หรือค้นหาใหม่
+    const option = select.options[select.selectedIndex];
+    if (option) {
+        // หา object หุ้นจริงๆ เพื่อความชัวร์
+        const stock = stocks.find(s => s.id === select.value);
+        if(stock) {
+            priceDisplay.textContent = stock.price.toLocaleString();
+            updateBrokerTotal();
+        }
+    }
+};
+
+// คำนวณราคารวม
+window.updateBrokerTotal = () => {
+    const select = document.getElementById('broker-stock-select');
+    const stock = stocks.find(s => s.id === select.value);
+    const qty = parseInt(document.getElementById('broker-qty').value) || 0;
+    
+    if (stock) {
+        const total = stock.price * qty;
+        document.getElementById('broker-total').textContent = total.toLocaleString();
+    }
+};
+
+// ยืนยันการเทรด (หัวใจหลัก)
+window.confirmBrokerTrade = async () => {
+    const studentDocId = document.getElementById('broker-student-select').value;
+    const stockId = document.getElementById('broker-stock-select').value;
+    const action = document.getElementById('broker-action').value; // buy / sell
+    const qty = parseInt(document.getElementById('broker-qty').value);
+
+    if (!studentDocId) return alert('กรุณาเลือกนักเรียนก่อนครับ');
+    if (!stockId) return alert('กรุณาเลือกหุ้น');
+    if (qty <= 0) return alert('จำนวนต้องมากกว่า 0');
+
+    const stock = stocks.find(s => s.id === stockId);
+    const student = students.find(s => s.id === studentDocId);
+    const totalAmount = stock.price * qty;
+
+    if (!confirm(`ยืนยันการ ${action === 'buy' ? 'ซื้อ' : 'ขาย'} หุ้น ${stock.symbol} จำนวน ${qty} หุ้น\nให้กับ ${student.full_name} ?`)) return;
+
+    try {
+        const batch = writeBatch(db);
+        const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentDocId);
+        let newPortfolio = [...(student.portfolio || [])];
+        const stockIndex = newPortfolio.findIndex(p => p.symbol === stock.symbol);
+
+        if (action === 'buy') {
+            // เช็คเงิน
+            if (student.points < totalAmount) return alert(`เงินนักเรียนไม่พอครับ (ขาด ${totalAmount - student.points} แต้ม)`);
+            
+            // หักเงิน + เพิ่มหุ้น
+            batch.update(sRef, { points: increment(-totalAmount) });
+            
+            if (stockIndex > -1) {
+                newPortfolio[stockIndex].amount += qty;
+            } else {
+                newPortfolio.push({ symbol: stock.symbol, amount: qty });
+            }
+        } else {
+            // เช็คหุ้น (กรณีขาย)
+            if (stockIndex === -1 || newPortfolio[stockIndex].amount < qty) {
+                return alert('นักเรียนมีหุ้นไม่พอขายครับ');
+            }
+
+            // เพิ่มเงิน + ลดหุ้น
+            batch.update(sRef, { points: increment(totalAmount) });
+            
+            newPortfolio[stockIndex].amount -= qty;
+            if (newPortfolio[stockIndex].amount <= 0) {
+                newPortfolio.splice(stockIndex, 1); // หุ้นหมดลบทิ้ง
+            }
+        }
+
+        // อัปเดตพอร์ต
+        batch.update(sRef, { portfolio: newPortfolio });
+
+        // บันทึกประวัติ (History)
+        const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+        batch.set(hRef, {
+            student_id: student.student_id,
+            student_name: student.full_name,
+            action: `[ครูเทรดให้] ${action === 'buy' ? 'ซื้อ' : 'ขาย'}หุ้น ${stock.symbol} x${qty}`,
+            amount: totalAmount,
+            type: 'stock_trade_broker',
+            timestamp: serverTimestamp()
+        });
+
+        await batch.commit();
+        
+        alert('✅ ทำรายการสำเร็จเรียบร้อย!');
+        closeBrokerModal();
+
+    } catch (e) {
+        console.error(e);
+        alert('เกิดข้อผิดพลาด: ' + e.message);
     }
 };
