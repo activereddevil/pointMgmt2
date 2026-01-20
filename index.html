@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.27.8</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.2</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -871,7 +871,7 @@
                     📈 ควบคุมตลาดหุ้น (Market Maker)
                 </h3>
                 
-                <div class="mb-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                     <button onclick="addNewStockPrompt()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-700">
                         + เพิ่มหุ้นใหม่ (IPO)
                     </button>
@@ -880,6 +880,9 @@
                     </button>
                     <button onclick="openPortfolioInspector()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 hover:shadow-indigo-200 transition-all flex items-center gap-2 shadow-sm">
                         <span>🕵️</span> ส่องพอร์ตนักเรียน
+                    </button>
+                    <button onclick="openBrokerModal()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 hover:shadow-emerald-200 transition-all shadow-sm flex items-center gap-2">
+                        <span>🛒</span> เทรดแทนศิษย์ (Broker)
                     </button>
                 </div>
 
@@ -2243,6 +2246,17 @@
             </h3>
             <button onclick="document.getElementById('portfolio-inspector-modal').classList.add('hidden'); document.getElementById('portfolio-inspector-modal').classList.remove('flex');" class="text-white/80 hover:text-white transition-colors text-3xl leading-none">&times;</button>
         </div>
+
+        <div class="p-3 bg-indigo-50 border-b border-indigo-100 flex justify-center">
+            <div class="relative w-full max-w-md">
+                <input type="text" 
+                       id="portfolio-search-input" 
+                       oninput="filterPortfolioList()" 
+                       placeholder="🔍 ค้นหาชื่อ หรือเลขประจำตัว..." 
+                       class="w-full pl-10 pr-4 py-2 border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-indigo-900 placeholder-indigo-300">
+                <span class="absolute left-3 top-2.5 text-indigo-400">👤</span>
+            </div>
+        </div>
         
         <div class="p-0 overflow-y-auto custom-scrollbar bg-slate-50 flex-1">
             <table class="w-full text-left border-collapse">
@@ -2337,6 +2351,71 @@
 
             <button type="submit" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg">บันทึกการแก้ไข</button>
         </form>
+    </div>
+</div>
+
+<div id="broker-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[90] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 flex flex-col">
+        
+        <div class="bg-emerald-700 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold text-lg flex items-center gap-2">
+                <span>🛒</span> ระบบเทรด (Broker Mode)
+            </h3>
+            <button onclick="closeBrokerModal()" class="text-white/80 hover:text-white text-2xl">&times;</button>
+        </div>
+        
+        <div class="p-6 space-y-4">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">1. เลือกนักเรียน (ลูกค้า)</label>
+                <div class="relative">
+                    <input type="text" id="broker-student-search" placeholder="🔍 ค้นหาชื่อ..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-emerald-500 outline-none" oninput="renderBrokerStudentList()">
+                    <span class="absolute left-3 top-2.5 text-slate-400">👤</span>
+                </div>
+                <select id="broker-student-select" class="w-full mt-2 p-2 border border-slate-300 rounded-lg text-sm bg-slate-50 font-bold text-slate-700" onchange="updateBrokerPortfolioInfo()">
+                    <option value="">-- กรุณาเลือกนักเรียน --</option>
+                </select>
+                <div id="broker-balance-info" class="text-right text-xs text-slate-400 mt-1 hidden">
+                    เงินในกระเป๋า: <span class="font-bold text-emerald-600" id="broker-student-cash">0</span> แต้ม
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">2. หุ้น (Stock)</label>
+                    <select id="broker-stock-select" class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold" onchange="updateBrokerPrice()">
+                        </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">3. คำสั่ง (Action)</label>
+                    <select id="broker-action" class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold bg-white" onchange="updateBrokerTotal()">
+                        <option value="buy">🟢 ซื้อ (Buy)</option>
+                        <option value="sell">🔴 ขาย (Sell)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">ราคาตลาด:</span>
+                    <span class="font-bold text-slate-700" id="broker-current-price">0</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-slate-500 w-20">จำนวน:</span>
+                    <input type="number" id="broker-qty" value="1" min="1" class="flex-1 p-2 border border-slate-300 rounded-lg text-center font-bold text-indigo-600" oninput="updateBrokerTotal()">
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-slate-200">
+                    <span class="text-sm font-bold text-slate-700">รวมเป็นเงิน:</span>
+                    <span class="text-xl font-bold text-emerald-600" id="broker-total">0</span>
+                </div>
+            </div>
+
+            <button onclick="confirmBrokerTrade()" class="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all transform active:scale-95 flex justify-center items-center gap-2">
+                <span>🚀</span> ยืนยันคำสั่งซื้อขาย
+            </button>
+        </div>
     </div>
 </div>
 
