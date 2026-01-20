@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.27</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.27.8</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -2086,10 +2086,16 @@
 <div id="stock-trade-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
     <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all scale-100">
         <div class="bg-slate-900 p-4 text-white flex justify-between items-center">
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 mx-auto bg-slate-100 rounded-full flex items-center justify-center text-4xl mb-3 shadow-inner" id="trade-stock-icon"></div>
+                <div id="trade-stock-desc" class="text-xs text-slate-400 mt-2 px-4 italic line-clamp-2"></div>
+            </div>
             <h3 class="font-bold text-lg flex items-center gap-2">
                 <span id="trade-stock-icon" class="text-2xl"></span>
                 <span id="trade-stock-name">Stock Name</span>
+                
             </h3>
+            
             <button onclick="closeTradeModal()" class="text-slate-400 hover:text-white">&times;</button>
         </div>
         
@@ -2165,6 +2171,13 @@
             <div>
                 <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">ชื่อบริษัทเต็ม</label>
                 <input type="text" id="stock-name" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-slate-500 outline-none text-slate-700 bg-white" placeholder="ระบุชื่อบริษัท..." required>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">รายละเอียด / ลักษณะธุรกิจ</label>
+                <textarea id="stock-desc" rows="3" 
+                    class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-slate-500 outline-none text-slate-700 bg-white resize-none" 
+                    placeholder="เช่น ทำธุรกิจผลิตรถยนต์ไฟฟ้า..."></textarea>
             </div>
 
             <div>
@@ -2250,6 +2263,80 @@
                 ปิดหน้าต่าง
             </button>
         </div>
+    </div>
+</div>
+
+<div id="edit-portfolio-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[80] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 flex flex-col">
+        
+        <div class="bg-slate-800 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold text-lg flex items-center gap-2">
+                <span>📝</span> ตั้งชื่อและกลยุทธ์พอร์ต
+            </h3>
+            <button onclick="closePortfolioEditor()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        
+        <div class="p-6 space-y-5">
+            <div class="text-center mb-2">
+                <div class="text-xs text-slate-500 uppercase font-bold">เจ้าของพอร์ต</div>
+                <div id="edit-port-student-name" class="font-bold text-lg text-indigo-600">ชื่อนักเรียน</div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">ชื่อพอร์ตการลงทุน (Portfolio Name)</label>
+                    <input type="text" id="edit-port-name" 
+                           class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:border-indigo-500 outline-none text-slate-800 font-bold placeholder-slate-300 transition-all" 
+                           placeholder="เช่น พอร์ตซิ่งสายฟ้า, VI ถือยาว">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">รายละเอียด / กลยุทธ์ (Strategy)</label>
+                    <textarea id="edit-port-desc" rows="4"
+                              class="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:border-indigo-500 outline-none text-slate-700 placeholder-slate-300 transition-all resize-none" 
+                              placeholder="อธิบายสไตล์การลงทุน หรือเป้าหมายของพอร์ตนี้..."></textarea>
+                </div>
+            </div>
+
+            <button onclick="savePortfolioDetails()" class="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all transform active:scale-95">
+                💾 บันทึกข้อมูล
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="edit-stock-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[80] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 flex flex-col">
+        <div class="bg-slate-800 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold text-lg flex items-center gap-2">✏️ แก้ไขข้อมูลหุ้น</h3>
+            <button onclick="closeEditStockModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        <form onsubmit="confirmEditStock(event)" class="p-6 space-y-4">
+            <input type="hidden" id="edit-stock-id">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">สัญลักษณ์ (Symbol)</label>
+                <input type="text" id="edit-stock-symbol" class="w-full px-4 py-2 bg-slate-100 border-2 border-slate-100 rounded-xl font-bold text-slate-500" readonly>
+            </div>
+
+            <div class="grid grid-cols-4 gap-4">
+                <div class="col-span-1">
+                    <label class="block text-xs font-bold text-slate-500 mb-1">ไอคอน</label>
+                    <input type="text" id="edit-stock-icon" class="w-full h-10 border-2 border-slate-200 rounded-xl text-center text-xl outline-none focus:border-indigo-500">
+                </div>
+                <div class="col-span-3">
+                    <label class="block text-xs font-bold text-slate-500 mb-1">ชื่อบริษัท</label>
+                    <input type="text" id="edit-stock-name" class="w-full h-10 px-3 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">รายละเอียดบริษัท</label>
+                <textarea id="edit-stock-desc" rows="4" class="w-full px-3 py-2 border-2 border-slate-200 rounded-xl outline-none focus:border-indigo-500 resize-none"></textarea>
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg">บันทึกการแก้ไข</button>
+        </form>
     </div>
 </div>
 
