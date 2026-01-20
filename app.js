@@ -9288,6 +9288,7 @@ window.updateBrokerPortfolioInfo = () => {
     if (s) {
         cashSpan.textContent = s.points.toLocaleString();
         infoBox.classList.remove('hidden');
+        calculateBrokerLimits();
     }
 };
 
@@ -9303,6 +9304,7 @@ window.updateBrokerPrice = () => {
         const stock = stocks.find(s => s.id === select.value);
         if(stock) {
             priceDisplay.textContent = stock.price.toLocaleString();
+            calculateBrokerLimits();
             updateBrokerTotal();
         }
     }
@@ -9444,5 +9446,73 @@ window.confirmBrokerTrade = async () => {
     } catch (e) {
         console.error(e);
         alert('เกิดข้อผิดพลาด: ' + e.message);
+    }
+};
+
+// ==========================================
+// 🧠 Broker Smart Context (คำนวณลิมิตอัตโนมัติ)
+// ==========================================
+
+window.calculateBrokerLimits = () => {
+    const studentId = document.getElementById('broker-student-select').value;
+    const stockId = document.getElementById('broker-stock-select').value;
+    const action = document.getElementById('broker-action').value; // buy/sell
+    
+    // Elements
+    const holdingDisplay = document.getElementById('broker-holding-display');
+    const maxBtn = document.getElementById('broker-max-btn');
+    const limitLabel = document.getElementById('broker-limit-label');
+
+    if (!studentId || !stockId) {
+        holdingDisplay.textContent = '-';
+        maxBtn.textContent = '0';
+        return;
+    }
+
+    const student = students.find(s => s.id === studentId);
+    const stock = stocks.find(s => s.id === stockId);
+    
+    if (!student || !stock) return;
+
+    // 1. หาจำนวนที่ถืออยู่ (Holdings)
+    const port = student.portfolio || [];
+    const holding = port.find(p => p.symbol === stock.symbol);
+    const holdingAmount = holding ? holding.amount : 0;
+    
+    holdingDisplay.textContent = `${holdingAmount} หุ้น`;
+
+    // 2. คำนวณลิมิต (Max)
+    let maxQty = 0;
+    
+    if (action === 'buy') {
+        // สูตร: เงินที่มี / (ราคาหุ้น + ค่าธรรมเนียม 3%)
+        const costPerShare = stock.price * 1.03;
+        if (costPerShare > 0) {
+            maxQty = Math.floor(student.points / costPerShare);
+        }
+        limitLabel.textContent = 'ซื้อได้สูงสุด:';
+        maxBtn.className = 'font-bold text-green-600 hover:text-green-800 underline ml-1 cursor-pointer';
+    } else {
+        // ขาย: ขายได้เท่าที่มี
+        maxQty = holdingAmount;
+        limitLabel.textContent = 'ขายได้สูงสุด:';
+        maxBtn.className = 'font-bold text-red-600 hover:text-red-800 underline ml-1 cursor-pointer';
+    }
+
+    maxBtn.textContent = maxQty.toLocaleString();
+    maxBtn.dataset.value = maxQty; // เก็บค่าดิบไว้ใช้ตอนกด
+};
+
+// ฟังก์ชันกดปุ่ม Max
+window.setBrokerMaxQty = () => {
+    const maxBtn = document.getElementById('broker-max-btn');
+    const qtyInput = document.getElementById('broker-qty');
+    
+    const val = parseInt(maxBtn.dataset.value) || 0;
+    if (val > 0) {
+        qtyInput.value = val;
+        updateBrokerTotal(); // สั่งคำนวณยอดเงินใหม่ทันที
+    } else {
+        alert('ไม่สามารถทำรายการได้ (ยอดเป็น 0)');
     }
 };
