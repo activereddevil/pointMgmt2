@@ -1204,7 +1204,7 @@ window.renderStudentList = (resetPage = true) => {
             </td>
 
             <td class="px-2 py-3 text-center text-indigo-700 font-mono text-xs font-bold">
-                ${(s.bank_points || 0).toLocaleString()}
+                ${Math.floor(s.bank_points || 0).toLocaleString()}
             </td>
             <td class="px-2 py-3 text-center text-green-600 font-mono text-xs">
                 +${Math.floor(pendingInterest).toLocaleString()}
@@ -2640,12 +2640,15 @@ window.calculateRedeemTotal = () => {
 // 5. Bank Logic
 // ฟังก์ชันคำนวณดอกเบี้ย (แก้ไข: รองรับบัฟส่วนตัวแบบ Override)
 // ฟังก์ชันคำนวณดอกเบี้ย (ฉบับอัปเกรด: ทบทุกบัฟ! 🚀)
+// 📂 app.js (แก้ไขฟังก์ชัน calculatePendingInterest ให้คำนวณแยกช่วงเวลา)
+
 function calculatePendingInterest(student) {
     // 1. 🔒 เช็คใบเตือน: ถ้ามีใบเตือน ดอกเบี้ยเป็น 0 เสมอ
     if ((student.warning_cards || 0) > 0) return 0;
 
     if (!student.bank_points || !student.bank_deposit_time) return 0;
 
+    // แปลงเวลาฝากเป็น Milliseconds
     let depositTime = student.bank_deposit_time;
     if (depositTime && typeof depositTime.toMillis === 'function') depositTime = depositTime.toMillis();
     else if (depositTime instanceof Date) depositTime = depositTime.getTime();
@@ -2653,37 +2656,81 @@ function calculatePendingInterest(student) {
     else return 0;
 
     const now = Date.now();
-    const hours = (now - depositTime) / (1000 * 60 * 60);
-    if (isNaN(hours) || hours < 0) return 0;
-
-    // --- เริ่มรวมพลังบัฟ ---
     
-    // 1. เรทพื้นฐาน
-    let totalRate = config.interest_rate || 1.0;
+    // ถ้าเวลาเพี้ยน (ฝากในอนาคต) ให้เป็น 0
+    if (now < depositTime) return 0;
 
-    // 2. บวกบัฟกิลด์
+    // --- กำหนดตัวแปร Rate ---
+    let normalRate = config.interest_rate || 1.0; // เรทปกติ
+    let guildBuffRate = 0; // บัฟกิลด์
+
+    // ดึงบัฟกิลด์ (ถ้ามี)
     if (student.guild_id && typeof getGuildActiveBuffs === 'function') {
         const activeBuffs = getGuildActiveBuffs(student.guild_id);
         if (activeBuffs && activeBuffs.interest) {
-            totalRate += parseFloat(activeBuffs.interest);
+            guildBuffRate = parseFloat(activeBuffs.interest);
         }
     }
+    
+    // เรทพื้นฐานรวม (ปกติ + กิลด์)
+    const baseRate = normalRate + guildBuffRate;
 
-    // 3. บวกบัฟส่วนตัว (ถ้ามีและยังไม่หมดอายุ)
+    // --- ตรวจสอบบัฟส่วนตัว (ดอกเบี้ยเทพ) ---
+    let specialEndTime = null;
+    let specialRateVal = 0;
+
     if (student.special_interest_end) {
-        let endTime = student.special_interest_end;
-        if (typeof endTime.toMillis === 'function') endTime = endTime.toMillis();
-        else if (endTime instanceof Date) endTime = endTime.getTime();
-        else if (endTime.seconds) endTime = endTime.seconds * 1000;
-
-        if (now < endTime) {
-            // 🔥 เปลี่ยนจาก = เป็น += (บวกทบเข้าไปเลย!)
-            totalRate += parseFloat(student.special_interest_rate || 0);
-        }
+        let t = student.special_interest_end;
+        if (typeof t.toMillis === 'function') t = t.toMillis();
+        else if (t instanceof Date) t = t.getTime();
+        else if (t.seconds) t = t.seconds * 1000;
+        
+        specialEndTime = t;
+        specialRateVal = parseFloat(student.special_interest_rate || 0);
     }
 
-    // คำนวณยอดเงินสุดท้าย
-    return student.bank_points * (totalRate / 100) * hours;
+    // ======================================================
+    // 🧮 การคำนวณแบบแยกช่วงเวลา (Split Calculation)
+    // ======================================================
+    
+    let totalInterest = 0;
+
+    if (specialEndTime && specialRateVal > 0) {
+        // กรณีมีบัฟเทพ (หรือเคยมี)
+        const highRate = baseRate + specialRateVal; // เรทเทพ
+
+        if (now <= specialEndTime) {
+            // ✅ กรณี A: บัฟยังไม่หมดอายุ (คำนวณเรทเทพเต็มจำนวน)
+            const hours = (now - depositTime) / (1000 * 60 * 60);
+            totalInterest = student.bank_points * (highRate / 100) * hours;
+        } else {
+            // ✅ กรณี B: บัฟหมดอายุไปแล้ว (ต้องคิดแยก 2 ขยัก)
+            
+            // ขยักที่ 1: ช่วงที่มีบัฟ (จากเวลาฝาก -> เวลาบัฟหมด)
+            // (ต้องเช็คด้วยว่าฝากก่อนบัฟหมดจริงไหม)
+            if (depositTime < specialEndTime) {
+                const hoursHigh = (specialEndTime - depositTime) / (1000 * 60 * 60);
+                const interestHigh = student.bank_points * (highRate / 100) * hoursHigh;
+                totalInterest += interestHigh;
+
+                // ขยักที่ 2: ช่วงหลังบัฟหมด (จากเวลาบัฟหมด -> ปัจจุบัน) ใช้เรทปกติ
+                const hoursNormal = (now - specialEndTime) / (1000 * 60 * 60);
+                const interestNormal = student.bank_points * (baseRate / 100) * hoursNormal;
+                totalInterest += interestNormal;
+            } else {
+                // ถ้าฝากหลังบัฟหมดไปแล้ว (เคสแปลกๆ) ก็คิดเรทปกติไปเลย
+                const hours = (now - depositTime) / (1000 * 60 * 60);
+                totalInterest = student.bank_points * (baseRate / 100) * hours;
+            }
+        }
+    } else {
+        // ✅ กรณี C: ไม่มีบัฟเทพเลย (คิดเรทปกติยาวๆ)
+        const hours = (now - depositTime) / (1000 * 60 * 60);
+        totalInterest = student.bank_points * (baseRate / 100) * hours;
+    }
+
+    // ส่งคืนค่าจำนวนเต็ม (ตัดทศนิยมทิ้ง) ตามที่คุณออฟต้องการ
+    return Math.floor(totalInterest);
 }
 
 let currentBankTarget = null;
@@ -2743,7 +2790,7 @@ window.openBankModal = (studentId) => {
     if(walletDisplay) walletDisplay.textContent = Math.floor(s.points).toLocaleString();
     
     // คำนวณยอดเงิน
-    const currentBank = s.bank_points || 0;
+    const currentBank = Math.floor(s.bank_points || 0);
     const pendingInterest = Math.floor(calculatePendingInterest(s));
     const totalShow = currentBank + pendingInterest; // ยอดรวมดอกเบี้ย
     
@@ -2775,7 +2822,7 @@ window.confirmBankAction = async (action) => {
     
     // คำนวณยอดเงินปัจจุบัน
     const interest = Math.floor(calculatePendingInterest(s)); 
-    const currentPrincipal = s.bank_points || 0;
+    const currentPrincipal = math.floor(s.bank_points || 0);
     const totalBalance = currentPrincipal + interest; 
     
     let amount = 0;
@@ -4519,7 +4566,7 @@ window.useItem = async (itemId, itemName) => {
             }
         }
         else if (inventoryItem.type === 'instant_interest') {
-            const interest = calculatePendingInterest(s);
+            const interest = math.floor(calculatePendingInterest(s));
             const newPrincipal = (s.bank_points || 0) + interest;
             const endTime = new Date();
             endTime.setHours(endTime.getHours() + (inventoryItem.hours || 24));
@@ -6047,10 +6094,6 @@ window.handleBankAll = (type) => {
     // เรียกฟังก์ชันหลักเพื่อบันทึกข้อมูล
     handleBankTransaction();
 };
-
-
-
-
 
 // ==========================================
 // 🎁 BULK GIVE GACHA SYSTEM (ระบบแจกกล่องสุ่มฟรี)
@@ -7646,6 +7689,18 @@ let currentStudentBankAction = 'deposit'; // 'deposit' or 'withdraw'
 
 // 1. เปิดหน้าต่างฝากถอน
 window.openStudentBankModal = (action) => {
+
+    if (currentStudentData.warning_cards && currentStudentData.warning_cards > 0) {
+        // ถ้ามีใบเตือน ให้เด้ง Modal สีแดงขึ้นมาด่า (เอ้ย! แจ้งเตือน) แทน
+        const frozenModal = document.getElementById('frozen-account-modal');
+        if (frozenModal) {
+            frozenModal.classList.remove('hidden');
+            frozenModal.classList.add('flex');
+        } else {
+            alert('⛔ บัญชีถูกระงับเนื่องจากมีใบเตือน (Warning)');
+        }
+        return; // ❌ จบการทำงานทันที (ไม่เปิดหน้าฝากถอน)
+    }
     currentStudentBankAction = action;
     const modal = document.getElementById('student-bank-modal');
     const title = document.getElementById('std-bank-title');
@@ -9328,7 +9383,7 @@ window.updateBrokerTotal = () => {
 
         if (action === 'buy') {
             netAmount = rawAmount + fee; // ซื้อ: ราคาของ + ค่าธรรมเนียม
-            text = `${netAmount.toLocaleString()} (รวม Fee ${fee})`;
+            text = `${netAmount.toLocaleString()} (รวม Fee: ${fee})`;
             
             // เปลี่ยนสีตัวเลข
             document.getElementById('broker-total').className = 'text-xl font-bold text-red-600'; 
