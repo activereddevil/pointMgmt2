@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.3</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.6</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -2130,7 +2130,7 @@
                 
                 <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
                     <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs text-gray-500">รวมเป็นเงิน</span>
+                        <span class="text-xs text-gray-500">แต้มรวม</span>
                         <span id="trade-total-price" class="font-bold text-lg text-indigo-600">0</span>
                     </div>
                     <div class="flex justify-between items-center text-[10px] text-gray-400">
@@ -2425,6 +2425,27 @@
 
             <button onclick="confirmBrokerTrade()" class="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all transform active:scale-95 flex justify-center items-center gap-2">
                 <span>🚀</span> ยืนยันคำสั่งซื้อขาย
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="frozen-account-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[90] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-red-500 animate-pulse-slow">
+        <div class="bg-red-50 p-6 text-center">
+            <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="text-4xl">👮‍♂️</span>
+            </div>
+            <h3 class="text-xl font-bold text-red-700 mb-2">บัญชีถูกระงับชั่วคราว!</h3>
+            <p class="text-sm text-gray-600 leading-relaxed mb-4">
+                คุณมี <span class="font-bold text-red-600 underline">ใบเตือน (Warning)</span> ค้างอยู่ในระบบ<br>
+                จึงไม่สามารถทำธุรกรรมทางการเงินได้ในขณะนี้
+            </p>
+            <div class="bg-white p-3 rounded-lg border border-red-100 text-xs text-red-500 font-bold mb-4">
+                💡 วิธีแก้ไข: โปรดติดต่อครูผู้สอนเพื่อลบใบเตือน
+            </div>
+            <button onclick="document.getElementById('frozen-account-modal').classList.remove('flex'); document.getElementById('frozen-account-modal').classList.add('hidden');" class="w-full py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors">
+                รับทราบ
             </button>
         </div>
     </div>
