@@ -24,6 +24,8 @@ let rewards = [];
 let history = [];
 let quests = [];
 let tempGuildSelection = new Set(); // 🧠 ตัวแปรจำรายชื่อสมาชิกที่ถูกเลือกชั่วคราว
+let allGuilds = []; // เก็บข้อมูลกิลด์ล่าสุดตลอดเวลา
+let allStudents = []; // เก็บข้อมูลนักเรียนไว้ด้วย (เพื่อให้เรียกวาดใหม่ได้)
 // Default config values
 let config = { 
     interest_rate: 1.0, 
@@ -243,6 +245,32 @@ window.handleLogout = async () => {
 
 // --- MAIN APP LOGIC ---
 
+// ฟังก์ชันเริ่มดักฟังข้อมูลกิลด์ (เรียกใช้ตอนเปิดเว็บ หรือ login สำเร็จ)
+window.initGuildListener = () => {
+    const guildRef = collection(db, 'artifacts', appId, 'public', 'data', 'guilds');
+    
+    // 👂 ดักฟังแบบ Real-time
+    onSnapshot(guildRef, (snapshot) => {
+        // 1. เก็บข้อมูลกิลด์ล่าสุด
+        allGuilds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // 2. จัดอันดับใหม่ทันที (เรียงตามคะแนนรวม)
+        allGuilds.sort((a, b) => (b.total_points || 0) - (a.total_points || 0));
+
+        // 3. กำหนด Rank ให้แต่ละกิลด์
+        allGuilds.forEach((g, index) => {
+            g.rank = index + 1; // ที่ 1, 2, 3...
+        });
+
+        console.log("🏆 Guilds Updated:", allGuilds);
+
+        // 🔥 ไฮไลท์สำคัญ: สั่งวาดตารางนักเรียนใหม่เดี๋ยวนี้!
+        if (typeof renderStudentList === 'function' && allStudents.length > 0) {
+            renderStudentList(allStudents);
+        }
+    });
+};
+
 // 1. โหลดหมวดหมู่ (แก้ไข Path ให้ถูกต้อง)
 async function loadRewardCategories() {
     try {
@@ -332,6 +360,7 @@ async function initAppUI() {
     loadRewardCategories();
     loadStreakConfig(); // โหลดค่าตั้งค่าเช็คชื่อ
     subscribeToStocks();
+    initGuildListener();
     
     // Clear previous intervals if any
     if (window.interestInterval) clearInterval(window.interestInterval);
@@ -1057,9 +1086,11 @@ function getRemainingTimeText(endTime) {
 // ✅ ฟังก์ชันแสดงรายชื่อนักเรียน (อัปเดต: เพิ่มแท็กเวลาบัฟ 🕒)
 // ✅ ฟังก์ชันแสดงรายชื่อนักเรียน (อัปเกรด: แสดงยอดบัฟแบบทบกัน ➕)
 window.renderStudentList = (resetPage = true) => {
+    allStudents = students;
     if (resetPage) paginationState.home = 1;
     const tbody = document.getElementById('student-list');
     const filter = document.getElementById('search-input').value.toLowerCase();
+   
     
     let filtered = students.filter(s => {
         const gName = s.guild_id ? (guilds.find(g => g.id === s.guild_id)?.name || '') : '';
@@ -1093,7 +1124,7 @@ window.renderStudentList = (resetPage = true) => {
         let guildBoost = 0;
 
         if (s.guild_id) {
-            const g = guilds.find(x => x.id === s.guild_id);
+            const g = allGuilds.find(x => x.id === s.guild_id);
             if (g) {
                 if (g.buff_interest) guildBonus = parseFloat(g.buff_interest);
                 // เก็บค่าบัฟกิลด์ไว้นำไปรวม
@@ -3722,7 +3753,7 @@ window.addGachaSlot = () => {
     div.className = 'bg-white p-3 rounded border border-amber-100 shadow-sm relative gacha-slot-item';
     div.innerHTML = `
         <div class="flex gap-2 mb-2">
-            <select class="border rounded text-sm px-2 py-1 bg-gray-50 flex-1 slot-type" onchange="updateSlotInputs(this)">
+            <select class="border rounded text-sm px-2 py-1 bg-gray-50 flex-1 slot-type min-w-0 w-[55%]" onchange="updateSlotInputs(this)">
                 <option value="points">💰 สุ่มแต้ม (ช่วง Min-Max)</option>
                 <option value="points_fix">💎 สุ่มแต้ม (Fix ค่าเดียว)</option>
                 <option value="interest">📈 ดอกเบี้ยพิเศษ</option>
@@ -3732,8 +3763,8 @@ window.addGachaSlot = () => {
                 <option value="text">💬 ข้อความ/กำหนดเอง</option>
                 <option value="salt">🧂 เกลือ (ไม่ได้อะไรเลย)</option> 
             </select>
-            <div class="flex items-center gap-1 w-24">
-                <input type="number" step="0.01" class="border rounded text-sm px-2 py-1 w-full text-center font-bold text-blue-600 slot-chance" placeholder="%" oninput="updateTotalChance()">
+            <div class="flex items-center gap-1 w-[30%]">
+                <input type="number" step="0.01" class="border rounded text-sm px-2 py-2 w-full text-center font-bold text-blue-600 slot-chance" placeholder="%" oninput="updateTotalChance()">
                 <span class="text-xs text-gray-400">%</span>
             </div>
             <button type="button" onclick="this.parentElement.parentElement.remove(); updateTotalChance()" class="text-red-400 hover:text-red-600">×</button>
@@ -3753,7 +3784,7 @@ window.addGachaSlot = () => {
 
             <div class="input-buff_discount hidden space-y-1">
                  <div class="flex gap-2 items-center">
-                    <span>ส่วนลด</span> <input type="number" min="1" max="100" class="border rounded w-20 px-2 py-1 slot-value font-bold text-red-500" placeholder="%"> %
+                    <span>ส่วนลดเพิ่ม</span> <input type="number" min="1" max="100" class="border rounded w-20 px-2 py-1 slot-value font-bold text-red-500" placeholder="%"> %
                  </div>
                  <div class="flex gap-2 items-center">
                     <span>นาน</span> <input type="number" min="1" class="border rounded w-20 px-2 py-1 slot-duration" placeholder="ชม." value="1"> ชั่วโมง
@@ -3773,7 +3804,7 @@ window.addGachaSlot = () => {
 
             <div class="input-interest hidden space-y-1">
                 <div class="flex gap-2 items-center">
-                    <span>ดอกเบี้ย</span> <input type="number" step="0.001" min="0.001" class="border rounded w-24 px-2 py-1 slot-rate font-bold text-green-600" placeholder="%"> %
+                    <span>ดอกเบี้ยเพิ่ม</span> <input type="number" step="0.001" min="0.001" class="border rounded w-24 px-2 py-1 slot-rate font-bold text-green-600" placeholder="%"> %
                 </div>
                 <div class="flex gap-2 items-center">
                     <span>นาน</span> <input type="number" step="0.1" min="0.1" class="border rounded w-20 px-2 py-1 slot-hours" placeholder="ชม."> ชั่วโมง
@@ -3820,7 +3851,7 @@ window.addEditGachaSlot = (data = null) => {
     div.className = 'bg-white p-3 rounded border border-amber-100 shadow-sm relative edit-gacha-slot-item';
     div.innerHTML = `
         <div class="flex gap-2 mb-2">
-            <select class="border rounded text-sm px-2 py-1 bg-gray-50 flex-1 slot-type" onchange="updateEditSlotInputs(this)">
+            <select class="border rounded text-sm px-2 py-1 bg-gray-50 flex-1 slot-type min-w-0 w-[55%]" onchange="updateEditSlotInputs(this)">
                 <option value="points">💰 สุ่มแต้ม (ช่วง Min-Max)</option>
                 <option value="points_fix">💎 สุ่มแต้ม (Fix ค่าเดียว)</option>
                 <option value="interest">📈 ดอกเบี้ยพิเศษ</option>
@@ -3830,8 +3861,8 @@ window.addEditGachaSlot = (data = null) => {
                 <option value="text">💬 ข้อความ/กำหนดเอง</option>
                 <option value="salt">🧂 เกลือ (ไม่ได้อะไรเลย)</option>
             </select>
-            <div class="flex items-center gap-1 w-24">
-                <input type="number" step="0.01" class="border rounded text-sm px-2 py-1 w-full text-center font-bold text-blue-600 slot-chance" placeholder="%" oninput="updateEditTotalChance()">
+            <div class="flex items-center gap-1 w-[30%]">
+                <input type="number" step="0.01" class="border rounded text-sm px-2 py-2 w-full text-center font-bold text-blue-600 slot-chance" placeholder="%" oninput="updateEditTotalChance()">
                 <span class="text-xs text-gray-400">%</span>
             </div>
             <button type="button" onclick="this.parentElement.parentElement.remove(); updateEditTotalChance()" class="text-red-400 hover:text-red-600">×</button>
@@ -3851,7 +3882,7 @@ window.addEditGachaSlot = (data = null) => {
 
             <div class="input-buff_discount hidden space-y-1">
                  <div class="flex gap-2 items-center">
-                    <span>ส่วนลด</span> <input type="number" min="1" max="100" class="border rounded w-20 px-2 py-1 slot-value font-bold text-red-500" placeholder="%"> %
+                    <span>ส่วนลดเพิ่ม</span> <input type="number" min="1" max="100" class="border rounded w-20 px-2 py-1 slot-value font-bold text-red-500" placeholder="%"> %
                  </div>
                  <div class="flex gap-2 items-center">
                     <span>นาน</span> <input type="number" min="1" class="border rounded w-20 px-2 py-1 slot-duration" placeholder="ชม." value="1"> ชั่วโมง
@@ -3868,7 +3899,7 @@ window.addEditGachaSlot = (data = null) => {
             </div>
             <div class="input-interest hidden space-y-1">
               <div class="flex gap-2 items-center">
-                <span>ดอกเบี้ย</span> <input type="number" step="0.001" min="0.001" class="border rounded w-24 px-2 py-1 slot-rate font-bold text-green-600" placeholder="%"> %
+                <span>ดอกเบี้ยเพิ่ม</span> <input type="number" step="0.001" min="0.001" class="border rounded w-24 px-2 py-1 slot-rate font-bold text-green-600" placeholder="%"> %
               </div>
             <div class="flex gap-2 items-center">
                 <span>นาน</span> <input type="number" step="0.1" min="0.1" class="border rounded w-20 px-2 py-1 slot-hours" placeholder="ชม."> ชั่วโมง
@@ -4549,10 +4580,21 @@ window.useItem = async (itemId, itemName) => {
         
         if (inventoryItem.type === 'instant_points') {
             const pts = inventoryItem.value || 0;
+           // 🔥 เพิ่ม Logic: เช็คใบเตือนก่อนแจกแต้ม
+           if ((s.warning_cards || 0) > 0) {
+            // ⛔ ถ้ามีใบเตือน -> เข้ากระเป๋าอายัด (Pending)
+            batch.update(sRef, { pending_points: increment(pts) });
+            
+            logMsg = `ใช้การ์ดแต้ม: ${pts} คะแนน (ถูกอายัดจากใบเตือน)`;
+            alertMsg = `⚠️ คุณมีใบเตือนค้างอยู่!\nแต้ม ${pts} คะแนน ถูกอายัดไว้ใน "แต้มรอตรวจสอบ" ชั่วคราวครับ`;
+        } else {
+            // ✅ ถ้าปกติ -> เข้ากระเป๋าหลักทันที
             batch.update(sRef, { points: increment(pts) });
+            
             logMsg = `ใช้การ์ดแต้ม: ได้รับ ${pts} คะแนน`;
             alertMsg = `เพิ่ม ${pts} แต้มเรียบร้อย`;
         }
+    }
         else if (inventoryItem.type === 'instant_red_card') {
             const amt = inventoryItem.value || 1;
             if (s.red_cards > 0) {
