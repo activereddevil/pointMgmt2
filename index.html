@@ -38,7 +38,7 @@
         <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
            <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full"><path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" /></svg>
         </div>
-        <h1 class="text-3xl font-bold mb-4">StdPoint V6.28.14</h1>
+        <h1 class="text-3xl font-bold mb-4">StdPoint V6.28.20</h1>
         <p class="text-lg opacity-90 mb-8">ระบบสะสมแต้มและจัดการพฤติกรรมนักเรียน</p>
         <div class="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm mb-4 text-4xl">
           👹
@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.14</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.20</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -371,21 +371,18 @@
     <div class="flex flex-wrap justify-center gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
         
         <div class="flex gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
-            <button onclick="showBulkQuestModal()" class="btn-action bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="ทำภารกิจ">
-                ⚡ <span class="hidden lg:inline">ภารกิจ</span>
-            </button>
             <button onclick="showBulkPointsModal('add', false)" class="btn-action bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="เพิ่มแต้ม">
-                ➕ <span class="hidden lg:inline">แต้ม</span>
+                ➕ <span class="hidden lg:inline">เพิ่มแต้ม</span>
             </button>
             <button onclick="showBulkPointsModal('remove', false)" class="btn-action bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="ลดแต้ม">
-                ➖ <span class="hidden lg:inline">แต้ม</span>
+                ➖ <span class="hidden lg:inline">ลดแต้ม</span>
             </button>
             <div class="flex gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700 ml-2">
                 <button onclick="showBulkWarningModal('add')" class="btn-action bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="แจกใบเตือน">
-                    ⚠️ <span class="hidden lg:inline">เตือน</span>
+                    ⚠️ <span class="hidden lg:inline"></span>
                 </button>
                 <button onclick="showBulkWarningModal('remove')" class="btn-action bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2" title="ลดใบเตือน">
-                    🛡️ <span class="hidden lg:inline">-เตือน</span>
+                    🛡️ <span class="hidden lg:inline"></span>
                 </button>
             </div>
             
@@ -401,9 +398,13 @@
             <button onclick="handleStickySingleAction('inventory')" class="btn-single bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
                 🎒 <span class="hidden lg:inline">ไอเทม</span>
             </button>
-            <button onclick="handleStickySingleAction('edit')" class="btn-single bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
-                ✏️ <span class="hidden lg:inline">แก้ไข</span>
+            <button onclick="openGiveBuffModal()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
+                🎟️<span class="hidden lg:inline">แจกคูปองบัฟ</span>
             </button>
+            <button onclick="handleStickySingleAction('edit')" class="btn-single bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 transition-all">
+                ✏️ <span class="hidden lg:inline"></span>
+            </button>
+            
             
         </div>
 
@@ -673,6 +674,7 @@
                         <option value="check_in">📅 เช็คชื่อ (Check-in)</option>
                         <option value="bank_deposit">💸 ฝากธนาคาร</option>
                         <option value="bank_withdraw">💸 ถอนธนาคาร</option>
+                        <option value="quest_complete">⚔️ ทำภารกิจ (Quest)</option>
                         <option value="buy_item">🛒 ซื้อของ</option>
                         <option value="gacha">📦 เปิดกล่องสุ่ม</option>
                         <option value="create_guild">🛡️ สร้างกิลด์</option>
@@ -2463,6 +2465,63 @@
             </div>
             <button onclick="document.getElementById('frozen-account-modal').classList.remove('flex'); document.getElementById('frozen-account-modal').classList.add('hidden');" class="w-full py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors">
                 รับทราบ
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="give-buff-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-[80] p-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100">
+        <div class="bg-indigo-600 px-6 py-4 flex justify-between items-center">
+            <h3 class="text-white font-bold text-lg">✨ สร้างและแจกคูปองบัฟ</h3>
+            <button onclick="document.getElementById('give-buff-modal').classList.add('hidden')" class="text-white hover:text-red-200 text-2xl">&times;</button>
+        </div>
+
+        <div class="px-6 pt-4 pb-2 bg-indigo-50 border-b border-indigo-100">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-indigo-800 uppercase tracking-wider">ผู้ได้รับคูปอง</span>
+                <span id="buff-recipient-count" class="bg-indigo-200 text-indigo-800 text-xs font-bold px-2 py-0.5 rounded-full">0 คน</span>
+            </div>
+            <div id="buff-recipient-list" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-white rounded-lg border border-indigo-100 shadow-inner">
+                <span class="text-xs text-gray-400 italic p-1">กำลังโหลดรายชื่อ...</span>
+            </div>
+        </div>
+        
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">ประเภทบัฟ</label>
+                <select id="buff-type-select" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500">
+                    <option value="interest">🏦 ดอกเบี้ยพิเศษ (+%)</option>
+                    <option value="discount">🏷️ ส่วนลดร้านค้า (+%)</option>
+                    <option value="boost">🚀 บูสต์แต้ม (+%)</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">ความแรง (%)</label>
+                <input type="number" id="buff-value-input" class="w-full border rounded-lg p-2" placeholder="เช่น 5, 10, 50">
+                <p class="text-xs text-gray-500 mt-1">*ดอกเบี้ยใส่ทศนิยมได้ (เช่น 0.5)</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">ระยะเวลาใช้งาน</label>
+                <div class="flex gap-2">
+                    <input type="number" id="buff-duration-input" class="w-full border rounded-lg p-2" placeholder="ระบุตัวเลข">
+                    <select id="buff-unit-select" class="border rounded-lg p-2 bg-gray-50">
+                        <option value="min">นาที</option>
+                        <option value="hour">ชั่วโมง</option>
+                        <option value="day">วัน</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">ชื่อคูปอง (ที่จะโชว์ให้นร.เห็น)</label>
+                <input type="text" id="buff-name-input" class="w-full border rounded-lg p-2" placeholder="เช่น คูปองเรียนดี, รางวัลตอบถูก">
+            </div>
+
+            <button onclick="confirmGiveBuff()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-lg transform active:scale-95 transition-all mt-4">
+                🎁 เสกคูปองแจกทันที!
             </button>
         </div>
     </div>
