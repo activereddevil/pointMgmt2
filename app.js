@@ -1488,15 +1488,63 @@ function renderRewards() {
 window.renderHistory = (resetPage = true) => {
     if (resetPage) paginationState.history = 1;
     const tbody = document.getElementById('history-list');
-    const filter = document.getElementById('history-search-input').value.toLowerCase();
+    const searchText = document.getElementById('history-search-input').value.toLowerCase(); // คำค้นหา
+    const searchType = document.getElementById('history-action-filter').value; // ประเภทที่เลือกจาก Dropdown
 
     // กรองข้อมูล
-    let filtered = history.filter(h => 
-        h.student_name.toLowerCase().includes(filter) || 
-        h.action.toLowerCase().includes(filter) ||
-        h.student_id.toLowerCase().includes(filter) ||
-        (h.reason && h.reason.toLowerCase().includes(filter))
-    );
+    let filtered = history.filter(h => {
+        // --- ส่วนที่ 1: เช็คคำค้นหา (ชื่อ/รหัส) ---
+        let searchableId = h.student_id;
+        const foundStudent = students.find(s => s.id === h.student_id);
+        if (foundStudent) searchableId = foundStudent.student_id;
+
+        const isTextMatch = (
+            searchText === '' || // ถ้าไม่พิมพ์อะไรเลยถือว่าผ่าน
+            h.student_name.toLowerCase().includes(searchText) || 
+            String(searchableId).toLowerCase().includes(searchText) ||
+            (h.reason && h.reason.toLowerCase().includes(searchText))
+        );
+
+       // เราต้องแปลงค่าจาก Dropdown ให้ตรงกับความจริงใน Database
+       let isTypeMatch = false;
+
+       if (searchType === '') {
+           isTypeMatch = true; // ถ้าเลือก "ทุกรายการ" ให้ผ่านหมด
+       } 
+       else if (searchType === 'check_in') {
+           // เช็คชื่อ: ใน DB ใช้ 'daily_streak'
+           isTypeMatch = (h.type === 'daily_streak');
+       }
+       else if (searchType === 'gacha') {
+           // กาชา: ให้หาทั้ง Type และดูชื่อรายการว่ามีคำว่า "กล่องสุ่ม" หรือไม่
+           isTypeMatch = (
+               h.type === 'gacha' || 
+               h.type === 'gacha_custom' || 
+               h.type === 'gacha_refund' ||
+               (h.action && h.action.includes('กล่องสุ่ม')) ||
+               (h.action && h.action.includes('Gacha'))
+           );
+       }
+       else if (searchType === 'punishment') {
+           // บทลงโทษ: ใน DB อาจเป็น 'warning_card_log' หรือ 'deduct_points'
+           isTypeMatch = (h.type === 'warning_card_log' || h.type === 'punishment');
+       }
+       else if (searchType === 'deduct_points') {
+           // หักแต้ม: ใน DB มักใช้ 'remove_points'
+           isTypeMatch = (h.type === 'remove_points' || h.type === 'deduct_points');
+       }
+       else if (searchType === 'create_guild') {
+           // สร้างกิลด์: ดูที่ Action text
+           isTypeMatch = (h.type === 'create_guild' || (h.action && h.action.includes('สร้างกิลด์')));
+       }
+       else {
+           // กรณีอื่นๆ (ฝาก/ถอน) มักจะตรงกันอยู่แล้ว เช็คแบบปกติได้เลย
+           isTypeMatch = (h.type === searchType);
+       }
+
+        // 🔥 ต้องตรงทั้ง 2 เงื่อนไข (AND)
+        return isTextMatch && isTypeMatch; 
+    });
 
     // เรียงลำดับ (ใหม่สุดขึ้นก่อน)
     filtered.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
@@ -1547,7 +1595,7 @@ window.renderHistory = (resetPage = true) => {
         return `
         <tr class="hover:bg-gray-50 border-b last:border-b-0 text-sm group">
             <td class="px-4 py-3 text-gray-500 whitespace-nowrap">${dateStr}</td>
-            <td class="px-4 py-3 font-bold text-gray-700">${displayStudentID}</td>
+
             <td class="px-4 py-3 font-bold text-gray-700">${h.student_name}</td>
             <td class="px-4 py-3">
                 <div class="flex flex-col">
@@ -4981,9 +5029,10 @@ window.openManageGuild = (gid) => {
     
     document.getElementById('manage-guild-id').value = gid;
     
-    // โหลดค่าบัฟ
-    document.getElementById('guild-buff-interest').value = (g.buff_interest || 0).toFixed(2);
-    document.getElementById('guild-buff-discount').value = g.buff_discount || 0;
+    const liveBuffs = getGuildActiveBuffs(gid); 
+    
+    document.getElementById('guild-buff-interest').value = (liveBuffs.interest || 0).toFixed(2);
+    document.getElementById('guild-buff-discount').value = liveBuffs.discount || 0;
 
     if(document.getElementById('edit-guild-cooldown')) {
     document.getElementById('edit-guild-cooldown').value = g.rule_cooldown || 0;
