@@ -1494,6 +1494,7 @@ window.renderHistory = (resetPage = true) => {
     let filtered = history.filter(h => 
         h.student_name.toLowerCase().includes(filter) || 
         h.action.toLowerCase().includes(filter) ||
+        h.student_id.toLowerCase().includes(filter) ||
         (h.reason && h.reason.toLowerCase().includes(filter))
     );
 
@@ -1535,9 +1536,18 @@ window.renderHistory = (resetPage = true) => {
             ? `<span class="text-red-600 font-bold">-${amountVal}</span>` 
             : `<span class="text-green-600 font-bold">+${amountVal}</span>`;
 
+        let displayStudentID = h.student_id;
+        const foundStudent = students.find(s => s.id === h.student_id);
+        
+        if (foundStudent) {
+            // ถ้าเจอ ให้ใช้เลขประจำตัวนักเรียน (field: student_id) มาโชว์แทน
+            displayStudentID = foundStudent.student_id;
+        }
+
         return `
         <tr class="hover:bg-gray-50 border-b last:border-b-0 text-sm group">
             <td class="px-4 py-3 text-gray-500 whitespace-nowrap">${dateStr}</td>
+            <td class="px-4 py-3 font-bold text-gray-700">${displayStudentID}</td>
             <td class="px-4 py-3 font-bold text-gray-700">${h.student_name}</td>
             <td class="px-4 py-3">
                 <div class="flex flex-col">
@@ -5614,15 +5624,10 @@ window.saveBuffRulesConfig = async () => {
 window.saveGuildConfig = async () => {
     const maxMembers = parseInt(document.getElementById('config-max-guild-members').value) || 0;
     
-    // รับค่ากฎใหม่
-    const ruleCooldown = parseInt(document.getElementById('config-guild-cooldown').value) || 0;
-    const ruleFee = parseInt(document.getElementById('config-guild-fee').value) || 0;
-
     try {
         // บันทึกทีละตัว (หรือจะรวม object ก็ได้ แต่อันนี้ชัวร์สุด)
         await saveConfig('max_guild_members', maxMembers);
-        await saveConfig('guild_rule_cooldown', ruleCooldown);
-        await saveConfig('guild_rule_fee', ruleFee);
+       
         
         showToast('✅ บันทึกกฎกิลด์เรียบร้อย (มีผลทันที)');
     } catch (e) {
