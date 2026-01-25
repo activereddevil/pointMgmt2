@@ -38,7 +38,7 @@
         <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
            <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full"><path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" /></svg>
         </div>
-        <h1 class="text-4xl font-bold mb-4">Student Points</h1>
+        <h1 class="text-3xl font-bold mb-4">StdPoint V6.28.14</h1>
         <p class="text-lg opacity-90 mb-8">ระบบสะสมแต้มและจัดการพฤติกรรมนักเรียน</p>
         <div class="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm mb-4 text-4xl">
           👹
@@ -108,7 +108,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.11</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.28.14</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -666,19 +666,35 @@
             <div class="mb-4 relative shrink-0">
                 <input type="text" id="history-search-input" placeholder="ค้นหาประวัติ..." class="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-transparent" oninput="renderHistory()">
                 <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <div class="w-full md:w-48">
+                    <select id="history-action-filter" onchange="renderHistory()" 
+                            class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-gray-700">
+                        <option value="">📂 ทุกรายการ</option>
+                        <option value="check_in">📅 เช็คชื่อ (Check-in)</option>
+                        <option value="bank_deposit">💸 ฝากธนาคาร</option>
+                        <option value="bank_withdraw">💸 ถอนธนาคาร</option>
+                        <option value="buy_item">🛒 ซื้อของ</option>
+                        <option value="gacha">📦 เปิดกล่องสุ่ม</option>
+                        <option value="create_guild">🛡️ สร้างกิลด์</option>
+                        <option value="punishment">⚠️ บทลงโทษ</option>
+                        <option value="clear_red_card">✨ ล้างโทษ</option>
+                        <option value="add_points">➕ เพิ่มแต้ม</option>
+                        <option value="deduct_points">➖ หักแต้ม</option>
+                    </select>
+                </div>
             </div>
             
+            
             <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 flex-1 flex flex-col min-h-[500px] md:min-h-0">
-                <div class="overflow-y-auto max-h-[1000px]">
-                    <table class="w-full text-sm min-w-[600px] md:min-w-full">
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm min-w-[1000px]">
                         <thead class="bg-gray-50 text-gray-700 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
                             <tr>
-                                <th class="px-4 py-5 text-left">เวลา</th>
-                                <th class="px-4 py-5 text-left">เลขประจำตัว</th>
-                                <th class="px-4 py-5 text-left">ชื่อ</th>
-                                <th class="px-4 py-5 text-left">รายการ</th>
-                                <th class="px-4 py-5 text-center">จำนวน</th>
-                                <th class="px-4 py-5 text-center">ลบ</th>
+                                <th class="px-4 py-3 text-left">เวลา</th>
+                                <th class="px-4 py-3 text-left">ชื่อ</th>
+                                <th class="px-4 py-3 text-left">รายการ</th>
+                                <th class="px-4 py-3 text-center">จำนวน</th>
+                                <th class="px-4 py-3 text-center">ลบ</th>
                             </tr>
                         </thead>
                         <tbody id="history-list" class="divide-y divide-gray-100">
@@ -1059,12 +1075,12 @@
                         </h4>
                         <div class="space-y-2">
                             <div class="flex items-center justify-end gap-2">
-                                <span class="text-[10px] text-amber-500 w-16">ดอกเบี้ย</span>
+                                <span class="text-[10px] text-amber-500 w-20">ดอกเบี้ย</span>
                                 <input type="number" id="guild-buff-interest" step="0.01" disabled class="w-20 h-8 px-2 border border-amber-200 rounded text-center text-sm font-bold text-green-600 focus:border-amber-500" placeholder="0.0">
                                 <span class="text-[10px] text-amber-500 w-6">%</span>
                             </div>
                             <div class="flex items-center justify-end gap-2">
-                                <span class="text-[10px] text-amber-500 w-16">ส่วนลดของ</span>
+                                <span class="text-[10px] text-amber-500 w-20">ส่วนลดของ</span>
                                 <input type="number" id="guild-buff-discount" disabled class="w-20 h-8 px-2 border border-amber-200 rounded text-center text-sm font-bold text-red-500 focus:border-amber-500" placeholder="0">
                                 <span class="text-[10px] text-amber-500 w-6">%</span>
                             </div>
