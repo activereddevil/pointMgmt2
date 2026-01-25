@@ -1141,9 +1141,15 @@ window.renderStudentList = (resetPage = true) => {
         
         // A. ดอกเบี้ยส่วนตัว
         const interestTime = getRemainingTimeText(s.special_interest_end);
-        let personalInterest = interestTime ? parseFloat(s.special_interest_rate || 0) : 0;
-        if (interestTime) {
-            buffBadgesHtml += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap" title="บัฟส่วนตัว: ดอกเบี้ย +${personalInterest}% เหลือ ${interestTime}">📈 ${interestTime}</span>`;
+        const couponIntTime = getRemainingTimeText(s.buff_interest_end);  // แบบคูปอง (ใหม่)
+
+        const val1 = interestTime ? parseFloat(s.special_interest_rate || 0) : 0;
+        const val2 = couponIntTime ? parseFloat(s.buff_interest_val || 0) : 0;
+
+        let personalInterest = val1 + val2;
+        const showIntTime = couponIntTime || interestTime;
+        if (personalInterest > 0 && showIntTime) {
+            buffBadgesHtml += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap" title="บัฟส่วนตัว: ดอกเบี้ย +${personalInterest}% เหลือ ${showIntTime}">📈 ${showIntTime}</span>`;
         }
 
         // B. ส่วนลดส่วนตัว (Discount)
@@ -1537,6 +1543,14 @@ window.renderHistory = (resetPage = true) => {
            // สร้างกิลด์: ดูที่ Action text
            isTypeMatch = (h.type === 'create_guild' || (h.action && h.action.includes('สร้างกิลด์')));
        }
+       else if (searchType === 'quest_complete') {
+        isTypeMatch = (
+            h.type === 'quest_complete' || 
+            h.type === 'mission' ||   // เผื่ออนาคตใช้คำว่า mission
+            h.type === 'job' ||       // เผื่อเป็นระบบงาน
+            (h.action && (h.action.includes('ภารกิจ') || h.action.includes('Quest') || h.action.includes('ตอบคำถาม')))
+        );
+    }
        else {
            // กรณีอื่นๆ (ฝาก/ถอน) มักจะตรงกันอยู่แล้ว เช็คแบบปกติได้เลย
            isTypeMatch = (h.type === searchType);
@@ -4410,8 +4424,53 @@ window.useItem = async (itemId, itemName) => {
     // ลบไอเทมเดิมออกก่อน (ใช้แล้วต้องหายไป)
     const newInventory = s.inventory.filter(i => (i.id || i.instance_id) !== itemId);
     batch.update(sRef, { inventory: newInventory });
+
+    // 🔥 ตรวจสอบว่าเป็นคูปองบัฟหรือไม่?
+    if (inventoryItem.type === 'buff_coupon' && inventoryItem.buff_config) {
+        const config = inventoryItem.buff_config;
+        const now = new Date();
+        const endTime = new Date(now.getTime() + (config.duration_min * 60 * 1000));
+        
+        let updates = {};
+        let logAction = "";
+
+        // แปลง Type เป็น Field ใน Database
+        if (config.target_stat === 'interest') {
+            updates['buff_interest_val'] = config.val;  // ค่าบัฟ (เช่น 2.0)
+            updates['buff_interest_end'] = endTime;     // เวลาหมดอายุ
+            logAction = `ใช้คูปองดอกเบี้ย +${config.val}%`;
+        } 
+        else if (config.target_stat === 'discount') {
+            updates['buff_discount_val'] = config.val;
+            updates['buff_discount_end'] = endTime;
+            logAction = `ใช้คูปองส่วนลด +${config.val}%`;
+        }
+        else if (config.target_stat === 'boost') {
+            updates['buff_points_val'] = (config.val); 
+            updates['buff_points_end'] = endTime;
+            logAction = `ใช้คูปองบูสต์แต้ม +${config.val}%`;
+        }
+
+        // อัปเดตสถานะบัฟให้นักเรียน
+        batch.update(sRef, updates);
+        
+        // บันทึกประวัติ
+        batch.set(hRef, {
+            student_id: s.id,
+            student_name: s.full_name,
+            action: logAction,
+            amount: 0,
+            type: 'use_buff_item',
+            timestamp: serverTimestamp()
+        });
+
+        await batch.commit();
+        showToast(`ใช้งาน ${inventoryItem.name} เรียบร้อย!`);
+        document.getElementById('teacher-inventory-modal').classList.add('hidden');
+        return; // จบการทำงาน
+    }
     let logMsg = "";
-    
+
    // 🔥🔥 [แก้ใหม่] เช็ค Gacha จากตัวไอเทมโดยตรง (ไม่ต้องพึ่งร้านค้า) 🔥🔥
    let pool = inventoryItem.gacha_pool;
     
@@ -4696,6 +4755,8 @@ window.useItem = async (itemId, itemName) => {
             logMsg = `ใช้บัตรส่วนลด: ลด ${val}% นาน ${dur} ชั่วโมง`;
             alertMsg = `เริ่มใช้ส่วนลด ${val}% เรียบร้อย! รีบไปช้อปเลย! (หมดเวลา: ${endTime.toLocaleDateString()} ${endTime.toLocaleTimeString()})`;
         }
+
+        
         else if (inventoryItem.type === 'instant_buff_points') {
             const val = parseInt(inventoryItem.value) || 10;
             const dur = parseInt(inventoryItem.duration) || 1;
@@ -4710,6 +4771,9 @@ window.useItem = async (itemId, itemName) => {
             logMsg = `ใช้บัตรบูสต์แต้ม: เพิ่ม ${val}% นาน ${dur} ชั่วโมง`;
             alertMsg = `🚀 เปิดใช้งานบูสต์แต้ม +${val}% เรียบร้อย! (หมดเวลา: ${endTime.toLocaleDateString()} ${endTime.toLocaleTimeString()})`;
         }
+
+        
+
         else {
             logMsg = `ใช้งานไอเทม: ${itemName}`;
             alertMsg = `บันทึกการใช้งาน "${itemName}" แล้ว`;
@@ -9665,5 +9729,125 @@ window.setBrokerMaxQty = () => {
         updateBrokerTotal(); // สั่งคำนวณยอดเงินใหม่ทันที
     } else {
         alert('ไม่สามารถทำรายการได้ (ยอดเป็น 0)');
+    }
+};
+
+// ==========================================
+// 🎁 ระบบแจกคูปองบัฟ (Buff Coupon System)
+// ==========================================
+
+window.openGiveBuffModal = () => {
+    // เช็คก่อนว่ามีการเลือกนักเรียนหรือยัง
+    if (selectedStudentIds.size === 0) return alert('กรุณาเลือกนักเรียนก่อนครับ');
+    // 2. ดึงข้อมูลนักเรียนที่เลือกมาเตรียมไว้
+    const recipients = [];
+    selectedStudentIds.forEach(id => {
+        const s = students.find(std => std.id === id);
+        if (s) recipients.push(s);
+    });
+    // 3. อัปเดตตัวเลขจำนวนคน
+    const countEl = document.getElementById('buff-recipient-count');
+    if(countEl) countEl.textContent = `${recipients.length} คน`;
+
+    // 4. สร้าง HTML รายชื่อ (Badge สวยๆ)
+    const listEl = document.getElementById('buff-recipient-list');
+    if(listEl) {
+        if (recipients.length > 0) {
+            listEl.innerHTML = recipients.map(s => `
+                <div class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 border border-indigo-200 text-xs text-indigo-700">
+                    <span class="font-bold">${s.student_id}</span>
+                    <span>${s.full_name}</span>
+                    <span class="text-[10px] text-gray-400 bg-white px-1 rounded border ml-1">${s.class_name || '-'}</span>
+                </div>
+            `).join('');
+        } else {
+            listEl.innerHTML = '<span class="text-xs text-red-400">ไม่พบข้อมูลนักเรียน</span>';
+        }
+    }
+    document.getElementById('give-buff-modal').classList.remove('hidden');
+};
+
+window.confirmGiveBuff = async () => {
+    const type = document.getElementById('buff-type-select').value;
+    const value = parseFloat(document.getElementById('buff-value-input').value);
+    const durationNum = parseInt(document.getElementById('buff-duration-input').value);
+    const unit = document.getElementById('buff-unit-select').value;
+    let customName = document.getElementById('buff-name-input').value.trim();
+
+    if (!value || !durationNum) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+
+    // คำนวณเป็นนาที (Standard Unit)
+    let durationMinutes = durationNum;
+    if (unit === 'hour') durationMinutes = durationNum * 60;
+    if (unit === 'day') durationMinutes = durationNum * 1440;
+
+    // ตั้งชื่ออัตโนมัติถ้าไม่ได้กรอก
+    if (!customName) {
+        const typeNames = { interest: 'ดอกเบี้ย', discount: 'ส่วนลดร้านค้า', boost: 'บูสต์แต้ม' };
+        customName = `คูปอง${typeNames[type]} +${value}% (${durationNum} ${unit === 'min' ? 'นาที' : (unit === 'hour' ? 'ชม.' : 'วัน')})`;
+    }
+
+    let icon = '🎟️'; // ค่าเริ่มต้น
+    if (type === 'interest') icon = '📈';      // ดอกเบี้ย = กราฟขึ้น
+    if (type === 'discount') icon = '🏷️';      // ส่วนลด = ป้ายราคา
+    if (type === 'boost') icon = '🚀';         // บูสต์ = จรวด
+
+    // 🔥 สร้าง Object ไอเทม (Dynamic Item)
+    const buffItem = {
+        id: crypto.randomUUID(), // สร้าง ID ใหม่เลย ไม่ซ้ำกับของในร้าน
+        name: customName,
+        type: 'buff_coupon',     // ตั้ง Type พิเศษเพื่อให้ระบบรู้
+        description: `บัฟพิเศษ: เพิ่ม ${value}% นาน ${durationNum} ${unit}`,
+        image: icon,
+        
+        // ฝังข้อมูลบัฟลงไปในไอเทมเลย
+        buff_config: {
+            target_stat: type,   // interest, discount, boost
+            val: value,
+            duration_min: durationMinutes
+        },
+        
+        can_use: true,           // กดใช้ได้
+        is_dynamic: true,        // บอกว่าเป็นของที่เสกมา
+        acquired_at: new Date()
+    };
+
+    try {
+        const batch = writeBatch(db);
+        let count = 0;
+
+        selectedStudentIds.forEach(sid => {
+            const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
+            
+            // ใช้ arrayUnion ยัดไอเทมเข้ากระเป๋า
+            batch.update(sRef, {
+                inventory: arrayUnion(buffItem)
+            });
+            
+            // บันทึกประวัติ
+            const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
+            batch.set(hRef, {
+                student_id: sid,
+                // ต้องหาชื่อนักเรียนจาก ID (สมมติว่าหาได้)
+                student_name: students.find(s => s.id === sid)?.full_name || 'Unknown',
+                action: `ได้รับคูปอง: ${customName}`,
+                amount: 0,
+                type: 'system_gift',
+                timestamp: serverTimestamp()
+            });
+            count++;
+        });
+
+        await batch.commit();
+        showToast(`✅ แจกคูปองให้ ${count} คนเรียบร้อย!`);
+        document.getElementById('give-buff-modal').classList.add('hidden');
+        
+        // Reset Form
+        document.getElementById('buff-value-input').value = '';
+        document.getElementById('buff-name-input').value = '';
+
+    } catch (e) {
+        console.error(e);
+        alert('Error: ' + e.message);
     }
 };
