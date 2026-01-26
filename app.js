@@ -64,6 +64,8 @@ let paginationState = {
 };
 // Default Items Per Page (Changeable)
 let itemsPerPage = 10;
+const MARKET_SENSITIVITY = 0.005; 
+const MIN_STOCK_PRICE = 1.00; // ราคาต่ำสุดที่เป็นไปได้
 
 // --- Helper for Consistent Collection References (READ ONLY) ---
 const collections = {
@@ -1263,6 +1265,7 @@ window.renderStudentList = (resetPage = true) => {
                     <button onclick="openBankModal('${s.id}')" class="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg border border-green-200 transition-colors" title="ธุรกรรมธนาคาร">
                         🏦
                     </button>
+                    
                     <button onclick="openEditStudentModal('${s.id}')" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="แก้ไข">
                         ✏️
                     </button>
@@ -8478,36 +8481,100 @@ window.calculateTradeTotal = () => {
     document.getElementById('trade-fee').textContent = fee.toLocaleString();
 };
 
+// --- ส่วนที่ 1: ประกาศตัวแปรนับจำนวน (วางไว้บนสุดของไฟล์ หรือนอกฟังก์ชัน) ---
+let tradeCounter = {}; 
+
+// --- ส่วนที่ 2: ฟังก์ชันอัปเดตราคาแบบประหยัดโควต้า ---
+async function updateStockPriceDynamic(stockId, qty, actionType) {
+    // เริ่มนับจำนวนเทรดของหุ้นตัวนี้
+    if (!tradeCounter[stockId]) tradeCounter[stockId] = 0;
+    tradeCounter[stockId]++;
+
+    // 🔥 LOGIC สำคัญ: ถ้ายังสะสมไม่ครบ 5 ครั้ง ให้จบฟังก์ชันเลย (ไม่ยิง Database)
+    // คุณสามารถแก้เลข 5 เป็น 10 ได้ถ้าอยากประหยัดสุดๆ
+    if (tradeCounter[stockId] < 5) {
+        console.log(`⏳ สะสมยอดเทรดหุ้น ${stockId}: ${tradeCounter[stockId]}/5 (ยังไม่อัปเดตราคา)`);
+        return; 
+    }
+
+    // เมื่อครบ 5 ครั้ง -> รีเซ็ตตัวนับ แล้วค่อยทำงานจริง
+    tradeCounter[stockId] = 0;
+
+    const stockRef = doc(db, 'artifacts', appId, 'public', 'data', 'stocks', stockId);
+    
+    try {
+        await runTransaction(db, async (transaction) => {
+            const stockDoc = await transaction.get(stockRef);
+            if (!stockDoc.exists()) return;
+
+            const data = stockDoc.data();
+            const currentPrice = parseFloat(data.price);
+            let newPrice = currentPrice;
+
+            // คำนวณราคา (คูณ 5 เพราะเราอั้นมา 5 รอบ ถึงปล่อยทีนึง)
+            // หรือจะคำนวณแบบปกติก็ได้ แต่ราคาจะขยับทีละนิด
+            const batchMultiplier = 5; 
+            const changePercent = (qty * MARKET_SENSITIVITY) * batchMultiplier; // คูณแรงขึ้นชดเชยรอบที่หายไป
+
+            if (actionType === 'buy') {
+                newPrice = currentPrice * (1 + changePercent);
+            } else {
+                newPrice = currentPrice * (1 - changePercent);
+            }
+
+            if (newPrice < MIN_STOCK_PRICE) newPrice = MIN_STOCK_PRICE;
+            newPrice = Math.round(newPrice * 100) / 100;
+
+            let history = data.price_history || [];
+            if (history.length >= 50) history.shift(); 
+            history.push({ price: newPrice, timestamp: Date.now() });
+
+            transaction.update(stockRef, { 
+                price: newPrice,
+                prev_price: currentPrice,
+                price_history: history,
+                last_update: serverTimestamp()
+            });
+        });
+        console.log(`✅ อัปเดตราคาหุ้น ${stockId} เรียบร้อย (Lot ใหญ่)!`);
+    } catch (e) {
+        console.error("Stock Price Update Failed:", e);
+    }
+}
+
+// Modified executeTrade with Dynamic Pricing
 window.executeTrade = async () => {
     if (config.market_status === 'closed') {
         return alert('⛔ ขณะนี้ตลาดหุ้น "ปิดทำการ" ครับ\n\n(ครูผู้สอนได้ปิดระบบการซื้อขายชั่วคราว)');
     }
     if (!currentTradeStock || !currentStudentData) return;
-    
+
     const qty = parseInt(document.getElementById('trade-qty').value);
     const price = currentTradeStock.price;
     const rawTotal = qty * price;
-    const fee = Math.ceil(rawTotal * MARKET_FEE_PERCENT);
+    
+    // คิดค่าธรรมเนียม (MARKET_FEE_PERCENT ต้องมีประกาศไว้ในโค้ดเดิม หรือใส่เลข 0.03 ตรงๆ)
+    const feeRate = (typeof MARKET_FEE_PERCENT !== 'undefined') ? MARKET_FEE_PERCENT : 0.03;
+    const fee = Math.ceil(rawTotal * feeRate);
+    
     const totalAmount = currentTradeMode === 'buy' ? rawTotal + fee : rawTotal - fee;
-
     const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id);
     const myPortfolio = currentStudentData.portfolio || [];
     const stockIndex = myPortfolio.findIndex(p => p.symbol === currentTradeStock.symbol);
-    
+
     try {
         const batch = writeBatch(db);
 
         if (currentTradeMode === 'buy') {
             if (currentStudentData.points < totalAmount) return alert('แต้มไม่พอครับ!');
-
+            
             // หักเงิน
             batch.update(sRef, { points: increment(-totalAmount) });
-
+            
             // เพิ่มหุ้นเข้าพอร์ต
             let newPortfolio = [...myPortfolio];
             if (stockIndex > -1) {
                 newPortfolio[stockIndex].amount += qty;
-                // คำนวณต้นทุนเฉลี่ยใหม่ (ถ้าจะทำลึกซึ้ง)
             } else {
                 newPortfolio.push({ symbol: currentTradeStock.symbol, amount: qty });
             }
@@ -8515,17 +8582,18 @@ window.executeTrade = async () => {
             
             showToast(`ซื้อ ${currentTradeStock.symbol} สำเร็จ! (-${totalAmount})`);
 
-        } else { // SELL
+        } else { 
+            // SELL
             if (stockIndex === -1 || myPortfolio[stockIndex].amount < qty) return alert('หุ้นไม่พอขายครับ!');
-
+            
             // เพิ่มเงิน
             batch.update(sRef, { points: increment(totalAmount) });
-
+            
             // ลดหุ้นออกจากพอร์ต
             let newPortfolio = [...myPortfolio];
             newPortfolio[stockIndex].amount -= qty;
             if (newPortfolio[stockIndex].amount <= 0) {
-                newPortfolio.splice(stockIndex, 1); // หมดแล้วลบทิ้ง
+                newPortfolio.splice(stockIndex, 1); 
             }
             batch.update(sRef, { portfolio: newPortfolio });
             
@@ -8545,8 +8613,15 @@ window.executeTrade = async () => {
 
         await batch.commit();
         closeTradeModal();
-        
-    } catch(e) { console.error(e); alert(e.message); }
+
+        // 🔥 [สำคัญ] สั่งให้ราคาขยับทันทีหลังเทรดสำเร็จ!
+        // ส่ง: (รหัสหุ้น, จำนวนที่เทรด, 'buy' หรือ 'sell')
+        updateStockPriceDynamic(currentTradeStock.id, qty, currentTradeMode);
+
+    } catch(e) {
+        console.error(e);
+        alert(e.message);
+    }
 };
 
 window.renderTeacherStockControl = () => {
@@ -9562,6 +9637,7 @@ window.updateBrokerTotal = () => {
 };
 
 // ยืนยันการเทรด (หัวใจหลัก)
+// Modified confirmBrokerTrade with Dynamic Pricing
 window.confirmBrokerTrade = async () => {
     const studentDocId = document.getElementById('broker-student-select').value;
     const stockId = document.getElementById('broker-stock-select').value;
@@ -9574,7 +9650,7 @@ window.confirmBrokerTrade = async () => {
 
     const stock = stocks.find(s => s.id === stockId);
     const student = students.find(s => s.id === studentDocId);
-    
+
     // 1. คำนวณยอดเงินและค่าธรรมเนียม
     const rawAmount = stock.price * qty;
     const fee = Math.floor(rawAmount * 0.03); // 3%
@@ -9587,7 +9663,6 @@ window.confirmBrokerTrade = async () => {
         netAmount = rawAmount - fee; // ได้น้อยลง
     }
 
-    // ข้อความยืนยัน
     const confirmMsg = action === 'buy' 
         ? `ซื้อหุ้น ${stock.symbol} x${qty}\nราคาหุ้น: ${rawAmount}\nค่าธรรมเนียม: ${fee}\nรวมจ่ายสุทธิ: ${netAmount} แต้ม`
         : `ขายหุ้น ${stock.symbol} x${qty}\nมูลค่าหุ้น: ${rawAmount}\nหักค่าธรรมเนียม: ${fee}\nได้รับสุทธิ: ${netAmount} แต้ม`;
@@ -9597,49 +9672,35 @@ window.confirmBrokerTrade = async () => {
     try {
         const batch = writeBatch(db);
         const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentDocId);
+        
         let newPortfolio = [...(student.portfolio || [])];
         const stockIndex = newPortfolio.findIndex(p => p.symbol === stock.symbol);
 
         if (action === 'buy') {
-            // เช็คเงิน (ต้องพอจ่ายยอดสุทธิ)
             if (student.points < netAmount) {
                 return alert(`เงินนักเรียนไม่พอครับ (มี ${student.points} / ต้องใช้ ${netAmount})`);
             }
-            
-            // หักเงิน
             batch.update(sRef, { points: increment(-netAmount) });
-            
-            // เพิ่มหุ้น
             if (stockIndex > -1) {
                 newPortfolio[stockIndex].amount += qty;
             } else {
                 newPortfolio.push({ symbol: stock.symbol, amount: qty });
             }
-            
             logAction = `[ครูเทรด] ซื้อ ${stock.symbol} x${qty} (รวมค่าธรรมเนียม ${fee})`;
-
         } else {
-            // เช็คหุ้น
             if (stockIndex === -1 || newPortfolio[stockIndex].amount < qty) {
                 return alert('นักเรียนมีหุ้นไม่พอขายครับ');
             }
-
-            // เพิ่มเงิน
             batch.update(sRef, { points: increment(netAmount) });
-            
-            // ลดหุ้น
             newPortfolio[stockIndex].amount -= qty;
             if (newPortfolio[stockIndex].amount <= 0) {
                 newPortfolio.splice(stockIndex, 1);
             }
-
             logAction = `[ครูเทรด] ขาย ${stock.symbol} x${qty} (หักค่าธรรมเนียม ${fee})`;
         }
 
-        // อัปเดตพอร์ต
         batch.update(sRef, { portfolio: newPortfolio });
 
-        // บันทึกประวัติ
         const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
         batch.set(hRef, {
             student_id: student.student_id,
@@ -9651,11 +9712,12 @@ window.confirmBrokerTrade = async () => {
         });
 
         await batch.commit();
-        
         alert('✅ ทำรายการสำเร็จเรียบร้อย!');
-        closeBrokerModal(); // ปิดหน้าต่าง
+        closeBrokerModal();
 
-        // (Optional) รีเฟรชหน้าถ้าจำเป็น
+        // 🔥 [สำคัญ] สั่งอัปเดตราคาแบบ Real-time
+        updateStockPriceDynamic(stockId, qty, action);
+
         if(window.renderBrokerStudentList) renderBrokerStudentList();
 
     } catch (e) {
@@ -9851,3 +9913,4 @@ window.confirmGiveBuff = async () => {
         alert('Error: ' + e.message);
     }
 };
+
