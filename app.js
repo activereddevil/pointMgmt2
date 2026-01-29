@@ -1,4 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging.js';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { getFirestore, collection, addDoc, setDoc, updateDoc, deleteDoc, doc, getDoc, onSnapshot, query, where, getDocs, increment, serverTimestamp, writeBatch, arrayUnion, arrayRemove, deleteField, runTransaction, orderBy } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";    // --- Firebase Config (Auto-injected by Canvas) ---
 const firebaseConfig = {
@@ -13,6 +14,7 @@ appId: "1:966337707500:web:e4762479cb69abe7abd4c9"
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const messaging = getMessaging(app);
 const appId = 'activeredpoint';
 
 
@@ -111,6 +113,70 @@ async function initSystem() {
 
 initSystem();
 
+// 🔔 ขอ Permission และบันทึก FCM Token
+async function requestNotificationPermission() {
+    try {
+      // 1. ขอสิทธิ์แจ้งเตือน
+      const permission = await Notification.requestPermission();
+      
+      if (permission === 'granted') {
+        console.log('✅ Notification permission granted!');
+        
+        // 2. ดึง FCM Token (ต้องใส่ VAPID Key จาก Firebase Console)
+        const token = await getToken(messaging, {
+          vapidKey: 'BK6Ub2hAXBWwbNk0BS8phyh-0j-GAwX450NJnCzOwtwMGwHQ0icRU2pgEFo4-g1pSK4dvkKEDmZV-GwD4NTndVs' // ⚠️ เปลี่ยนตรงนี้!
+        });
+        
+        if (token) {
+          console.log('📱 FCM Token:', token);
+          
+          // 3. บันทึก Token ลง Firestore
+          if (currentStudentData && currentStudentData.id) {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id), {
+              fcmToken: token,
+              lastTokenUpdate: serverTimestamp()
+            });
+            console.log('✅ Token saved to Firestore!');
+          }
+          
+          showToast('🔔 เปิดการแจ้งเตือนสำเร็จ!');
+        }
+      } else {
+        console.log('❌ Notification permission denied');
+        showToast('⚠️ คุณปฏิเสธการแจ้งเตือน', 'error');
+      }
+    } catch (error) {
+      console.error('❌ Error requesting permission:', error);
+    }
+  }
+  
+  // 🎯 รับ Notification ขณะเปิดแอพอยู่ (Foreground)
+  onMessage(messaging, (payload) => {
+    console.log('🔔 Received foreground message:', payload);
+    
+    const { title, body, icon } = payload.notification || {};
+    const data = payload.data || {};
+    
+    // แสดงแบบ Browser Notification
+    if (Notification.permission === 'granted') {
+      new Notification(title || '📢 แจ้งเตือน', {
+        body: body || 'คุณมีข้อความใหม่',
+        icon: icon || '🔔',
+        badge: '🎯',
+        tag: data.type || 'default'
+      });
+    }
+    
+    // แสดงแบบ Toast (ของระบบที่มีอยู่)
+    if (data.type === 'addpoints') {
+      showGameNotification('addpoints', title, `+${data.amount}`, '⭐');
+    } else if (data.type === 'removepoints') {
+      showGameNotification('removepoints', title, `-${data.amount}`, '💔');
+    } else {
+      showToast(`${title}: ${body}`);
+    }
+  });
+
 window.switchLoginTab = (tab) => {
     const studentForm = document.getElementById('form-login-student');
     const teacherForm = document.getElementById('form-login-teacher');
@@ -172,6 +238,10 @@ window.handleStudentLogin = async () => {
         // Toast ต้อนรับ
         showToast(`ยินดีต้อนรับ ${data.full_name}`);
         initAppUI();
+        
+        setTimeout(() => {
+            requestNotificationPermission();
+          }, 1000);
 
     } catch (e) {
         console.error("Login Error:", e);
@@ -5029,7 +5099,7 @@ window.renderGuildsDashboard = (resetPage = true) => {
             <div class="absolute -top-4 bg-white p-2 rounded-full shadow-md text-2xl">${medals[index]}</div>
             <div class="text-6xl mb-2 mt-2 transform hover:scale-110 transition-transform cursor-default">${g.icon}</div>
             <h3 class="text-xl font-bold mb-1">${g.name}</h3>
-            <p class="text-3xl font-black mb-2">${g.totalPoints.toLocaleString()}</p>
+            <p class="text-3xl font-black mb-2">${Math.floor(g.totalPoints).toLocaleString()}</p>
             <div class="text-[10px] font-bold bg-white/60 rounded-lg px-2 py-1 space-y-0.5 w-full text-center">
                 ${buffText || '- ไม่มีบัฟ -'}
             </div>
@@ -5067,7 +5137,7 @@ window.renderGuildsDashboard = (resetPage = true) => {
                     </div>
                 </td>
                 <td class="px-6 py-4 text-center text-gray-600">${g.memberCount}</td>
-                <td class="px-6 py-4 text-center font-bold text-gray-800 group-hover:text-indigo-600">${g.totalPoints.toLocaleString()}</td>
+                <td class="px-6 py-4 text-center font-bold text-gray-800 group-hover:text-indigo-600">${Math.floor(g.totalPoints).toLocaleString()}</td>
                 <td class="px-6 py-4 text-center">
                     <button class="text-indigo-600 hover:bg-indigo-100 p-2 rounded-full">⚙️ จัดการ</button>
                 </td>
@@ -8143,7 +8213,7 @@ window.renderStudentGuild = () => {
                             👥 สมาชิก ${myGuildStats.memberCount} คน
                         </div>
                         <div class="bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-2 backdrop-blur-sm">
-                            🏆 แต้มรวม ${myGuildStats.totalPoints.toLocaleString()}
+                            🏆 แต้มรวม ${Math.floor(myGuildStats.totalPoints).toLocaleString()}
                         </div>
                         <div class="bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-2 backdrop-blur-sm">
                             💸 ค่าปรับฉีกสัญญา ${(parseInt(myGuild.rule_fee) || 0).toLocaleString()} แต้ม
@@ -8351,7 +8421,7 @@ window.renderStockMarket = () => {
 
         // คำนวณการเปลี่ยนแปลงราคา
         const change = stock.price - (stock.prev_price || stock.price);
-        const changePercent = stock.prev_price ? ((change / stock.prev_price) * 100).toFixed(1) : 0;
+        const changePercent = stock.prev_price ? (change / stock.prev_price) * 100 : 0;
         const colorClass = change >= 0 ? 'text-green-500' : 'text-red-500';
         const sign = change >= 0 ? '+' : '';
        
@@ -8369,8 +8439,8 @@ window.renderStockMarket = () => {
                     </div>
                 </div>
                 <div class="text-right">
-                    <div class="font-bold text-xl text-slate-800">${stock.price}</div>
-                    <div class="text-xs font-bold ${colorClass}">${sign}${change} (${sign}${changePercent}%)</div>
+                    <div class="font-bold text-xl text-slate-800">${Math.floor(stock.price)}</div>
+                    <div class="text-xs font-bold ${colorClass}">${sign}${Math.floor(change)} (${sign}${(changePercent).toFixed(1)}%)</div>
                 </div>
             </div>
             
@@ -8410,7 +8480,7 @@ window.openTradeModal = (stockId) => {
 
     document.getElementById('trade-stock-name').textContent = `${currentTradeStock.symbol} - ${currentTradeStock.name}`;
     document.getElementById('trade-stock-icon').textContent = currentTradeStock.icon || '📈';
-    document.getElementById('trade-stock-price').textContent = currentTradeStock.price;
+    document.getElementById('trade-stock-price').textContent = Math.floor(currentTradeStock.price);
 
     const descEl = document.getElementById('trade-stock-desc');
     if (descEl) {
@@ -8470,7 +8540,7 @@ window.adjustTradeQty = (delta) => {
 
 window.calculateTradeTotal = () => {
     const qty = parseInt(document.getElementById('trade-qty').value) || 0;
-    const price = currentTradeStock.price;
+    const price = Math.floor(currentTradeStock.price);
     const rawTotal = qty * price;
     
     // คิดค่าธรรมเนียมเฉพาะตอนซื้อ (หรือขายด้วยแล้วแต่กติกา) -> อันนี้เอาแบบมาตรฐาน: ซื้อเสีย/ขายเสีย
@@ -8662,7 +8732,7 @@ window.renderTeacherStockControl = () => {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
                 <div class="text-xs font-bold text-indigo-400 uppercase">มูลค่าตลาดรวม</div>
-                <div class="text-2xl font-bold text-indigo-700">${totalMarketCap.toLocaleString()} แต้ม</div>
+                <div class="text-2xl font-bold text-indigo-700">${Math.floor(totalMarketCap).toLocaleString()} แต้ม</div>
                 <div class="text-xs text-indigo-500 mt-1">นักลงทุน: ${richList.length} คน</div>
             </div>
             <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 col-span-2">
@@ -8673,7 +8743,7 @@ window.renderTeacherStockControl = () => {
                             <span class="text-xs font-bold bg-emerald-100 text-emerald-600 w-5 h-5 flex items-center justify-center rounded-full">${i+1}</span>
                             <div>
                                 <div class="text-sm font-bold text-gray-700">${inv.name}</div>
-                                <div class="text-[10px] text-gray-500">${inv.val.toLocaleString()}</div>
+                                <div class="text-[10px] text-gray-500">${Math.floor(inv.val).toLocaleString()}</div>
                             </div>
                         </div>
                     `).join('') : '<div class="text-sm text-gray-400 italic">ยังไม่มีข้อมูล...</div>'}
@@ -8725,7 +8795,7 @@ window.renderTeacherStockControl = () => {
                     </div>
                 </div>
             </td>
-            <td class="px-4 py-3 text-lg font-bold text-indigo-600 align-top">${stock.price}</td>
+            <td class="px-4 py-3 text-lg font-bold text-indigo-600 align-top">${Math.floor(stock.price)}</td>
             <td class="px-4 py-3 align-top">
                 <div class="flex flex-col gap-2">
                     <div class="flex gap-1 flex-wrap">
@@ -9345,7 +9415,7 @@ window.renderPortfolioList = (dataList) => {
                     </div>
                 </td>
                 <td class="p-4 text-right font-mono font-bold text-indigo-600 border-r border-slate-100 align-top">
-                    ${s.totalVal.toLocaleString()}
+                    ${Math.floor(s.totalVal).toLocaleString()}
                 </td>
                 <td class="p-4 align-top">
                     <div class="flex flex-wrap gap-2">
@@ -9528,7 +9598,7 @@ window.openBrokerModal = () => {
     // 1. เติมรายชื่อหุ้นลง Dropdown
     const stockSelect = document.getElementById('broker-stock-select');
     stockSelect.innerHTML = stocks.map(s => 
-        `<option value="${s.id}" data-price="${s.price}">${s.symbol} (${s.price})</option>`
+        `<option value="${s.id}" data-price="${s.price}">${s.symbol} (${Math.floor(s.price)})</option>`
     ).join('');
 
     // 2. เติมรายชื่อนักเรียน (โหลดครั้งแรก)
@@ -9593,7 +9663,7 @@ window.updateBrokerPrice = () => {
         // หา object หุ้นจริงๆ เพื่อความชัวร์
         const stock = stocks.find(s => s.id === select.value);
         if(stock) {
-            priceDisplay.textContent = stock.price.toLocaleString();
+            priceDisplay.textContent = Math.floor(stock.price).toLocaleString();
             calculateBrokerLimits();
             updateBrokerTotal();
         }
@@ -9611,20 +9681,20 @@ window.updateBrokerTotal = () => {
     const stock = stocks.find(s => s.id === stockId);
     
     if (stock && qty > 0) {
-        const rawAmount = stock.price * qty;
+        const rawAmount = Math.floor(stock.price) * qty;
         const fee = Math.floor(rawAmount * 0.03); // ค่าธรรมเนียม 3%
         let netAmount = 0;
         let text = '';
 
         if (action === 'buy') {
             netAmount = rawAmount + fee; // ซื้อ: ราคาของ + ค่าธรรมเนียม
-            text = `${netAmount.toLocaleString()} (รวม Fee: ${fee})`;
+            text = `${Math.floor(netAmount).toLocaleString()} (รวม Fee: ${fee})`;
             
             // เปลี่ยนสีตัวเลข
             document.getElementById('broker-total').className = 'text-xl font-bold text-red-600'; 
         } else {
             netAmount = rawAmount - fee; // ขาย: ราคาของ - ค่าธรรมเนียม
-            text = `${netAmount.toLocaleString()} (หัก Fee ${fee})`;
+            text = `${Math.floor(netAmount).toLocaleString()} (หัก Fee ${fee})`;
             
             // เปลี่ยนสีตัวเลข
             document.getElementById('broker-total').className = 'text-xl font-bold text-green-600';
@@ -9652,7 +9722,7 @@ window.confirmBrokerTrade = async () => {
     const student = students.find(s => s.id === studentDocId);
 
     // 1. คำนวณยอดเงินและค่าธรรมเนียม
-    const rawAmount = stock.price * qty;
+    const rawAmount = Math.floor(stock.price) * qty;
     const fee = Math.floor(rawAmount * 0.03); // 3%
     let netAmount = 0;
     let logAction = '';
@@ -9913,4 +9983,3 @@ window.confirmGiveBuff = async () => {
         alert('Error: ' + e.message);
     }
 };
-
