@@ -2588,6 +2588,8 @@ function renderShopGrid() {
          grid.innerHTML = '<p class="text-center text-gray-500 w-full col-span-3">ข้อมูลนักเรียนไม่อัปเดต โปรดลองใหม่</p>';
          return;
     }
+    const currentInv = (s.inventory || []).length;
+    const isBagFull = currentInv >= 3; // (เลข 3 คือโควตา)
 
     let items = rewards.map(r => {
         // เช็คว่าเป็นกาชาหรือไม่ (เพื่อใส่ icon หรือลูกเล่นเฉยๆ)
@@ -2637,7 +2639,8 @@ function renderShopGrid() {
         const isUnlimited = (r.stock === -1 || r.stock === '-1');
         const hasStock = isUnlimited || parseInt(r.stock) > 0;
         
-        const available = (canAfford || isGain) && hasStock && !isQuotaFull;
+        
+        const available = (canAfford || isGain) && hasStock && !isQuotaFull && !isBagFull;
 
         return {
             ...r,
@@ -2694,7 +2697,11 @@ function renderShopGrid() {
                 btnText = '❌ ครบโควตา';
             } else if (!r.hasStock) {
                 btnText = '❌ สินค้าหมด';
-            } else if (!r.canAfford && !r.isGain) {
+            }
+            else if (isBagFull) {          // <--- เพิ่มบรรทัดนี้
+                btnText = '🎒 กระเป๋าเต็ม';   // <--- ปุ่มจะขึ้นว่ากระเป๋าเต็ม
+            }
+            else if (!r.canAfford && !r.isGain) {
                 btnText = '🔒 แต้มไม่พอ';
             }
         }
@@ -2744,6 +2751,24 @@ function renderShopGrid() {
 
 let currentDiscountPercent = 0;
 window.selectRewardForRedeem = (rewardId) => {
+
+    // =======================================================
+    // 🎒 ส่วนที่ 1: เช็คกระเป๋า (แทรกตรงนี้)
+    // =======================================================
+    const s = students.find(x => x.id === selectedStudentForRedeem.id);
+    const MAX_SLOTS = 3; // กำหนดจำนวนช่องเก็บของ
+
+    // ถ้าไม่ใช่ครูแจกฟรี (ซื้อเอง) และกระเป๋าเต็ม
+    const currentInventory = s.inventory || [];
+    if (currentInventory.length >= MAX_SLOTS) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'กระเป๋าเต็มแล้ว! 🎒',
+            html: `นักเรียนคนนี้มีไอเทมครบ ${MAX_SLOTS} ชิ้นแล้ว<br>ต้องใช้ของเก่าก่อนถึงจะแลกใหม่ได้ครับ`,
+            confirmButtonText: 'ตกลง'
+        });
+        return; // 🛑 หยุดทันที ไม่เปิดหน้าต่างแลก
+    }
     redeemTarget = rewards.find(r => r.id === rewardId);
     // ปิดหน้าเลือกของ
     document.getElementById('student-redeem-modal').classList.add('hidden');
@@ -3558,7 +3583,7 @@ window.renderClassReport = () => {
         <tr class="hover:bg-gray-50">
             <td class="px-6 py-4 font-bold text-gray-800">${c.name}</td>
             <td class="px-6 py-4 text-center">${c.count} คน</td>
-            <td class="px-6 py-4 text-center font-bold text-blue-600">${c.points.toLocaleString()}</td>
+            <td class="px-6 py-4 text-center font-bold text-blue-600">${Math.floor(c.points).toLocaleString()}</td>
             <td class="px-6 py-4 text-center text-gray-500">${(c.points / c.count).toFixed(2)}</td>
             <td class="px-6 py-4 text-center font-bold ${c.warning_cards > 0 ? 'text-yellow-600' : 'text-gray-300'}">${c.warning_cards}</td>
         </tr>
