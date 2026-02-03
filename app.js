@@ -472,19 +472,17 @@ function loadStreakConfig() {
                 // 2. อัปเดตหน้าตั้งค่าครู (ถ้าเปิดอยู่)
                 if (document.getElementById('conf-streak-base')) {
                     document.getElementById('conf-streak-base').value = streakConfig.base_points;
-                    streakConfig.milestones.forEach((m, i) => {
-                        const dInput = document.getElementById(`conf-streak-d${i+1}`);
-                        const pInput = document.getElementById(`conf-streak-p${i+1}`);
-                        if(dInput) dInput.value = m.days;
-                        if(pInput) pInput.value = m.bonus;
-                    });
+                }
+                                // 2. ✅ โหลดข้อมูลเข้าตัวแปร Dynamic ของเรา
+                if (streakConfig.milestones && Array.isArray(streakConfig.milestones)) {
+                    tempStreakMilestones = [...streakConfig.milestones]; // สำเนาข้อมูลมา
+                } else {
+                    tempStreakMilestones = []; // ถ้าไม่มี ให้เริ่มว่างๆ
                 }
 
-                // 3. 🔥 สั่งวาดปุ่มนักเรียนใหม่ทันที (Force Re-render)
-                // เช็คด้วยว่า Widget ถูกสร้างหรือยัง
-                if (document.getElementById('student-streak-widget') && window.currentStudentData) {
-                    renderStreakWidget(window.currentStudentData);
-                    console.log("✨ รีเฟรชปุ่มรับแต้มเรียบร้อย!");
+                // 3. สั่งวาด UI ใหม่ทันที
+                if (typeof renderStreakSettingsUI === 'function') {
+                    renderStreakSettingsUI();
                 }
             }
         } else {
@@ -495,25 +493,99 @@ function loadStreakConfig() {
     });
 }
 
+// --- ตัวแปรเก็บค่าชั่วคราวสำหรับหน้าตั้งค่า ---
+let tempStreakMilestones = [];
+
+// 1. ฟังก์ชันวาดหน้าจอตั้งค่า (Render UI)
+window.renderStreakSettingsUI = () => {
+    const container = document.getElementById('streak-settings-container');
+    if (!container) return;
+    
+    container.innerHTML = ''; // เคลียร์ของเก่า
+
+    // เรียงลำดับตามวัน (น้อย -> มาก) เพื่อความสวยงาม
+    tempStreakMilestones.sort((a, b) => a.days - b.days);
+
+    tempStreakMilestones.forEach((tier, index) => {
+        const row = document.createElement('div');
+        row.className = 'grid grid-cols-12 gap-2 items-center text-sm bg-white p-2 rounded border border-orange-100 shadow-sm animate-fade-in-up';
+        
+        row.innerHTML = `
+            <div class="col-span-1 text-center font-bold text-gray-400">${index + 1}</div>
+            
+            <div class="col-span-4 flex items-center gap-1">
+                <span class="text-gray-500 text-xs">ครบ</span>
+                <input type="number" value="${tier.days}" onchange="updateStreakTemp(${index}, 'days', this.value)" 
+                    class="w-full border border-gray-300 rounded px-2 py-1 text-center focus:ring-2 focus:ring-orange-200 outline-none" placeholder="วัน">
+            </div>
+            
+            <div class="col-span-6 flex items-center gap-1">
+                <span class="text-gray-500 text-xs">รับ</span>
+                <input type="number" value="${tier.bonus}" onchange="updateStreakTemp(${index}, 'bonus', this.value)" 
+                    class="w-full border border-gray-300 rounded px-2 py-1 text-center font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-200 outline-none" placeholder="แต้ม">
+            </div>
+            
+            <div class="col-span-1 text-center">
+                <button onclick="removeStreakLevelRow(${index})" class="text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-1 transition-colors">
+                    🗑️
+                </button>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+};
+
+// 2. ฟังก์ชันอัปเดตค่าในตัวแปรชั่วคราว
+window.updateStreakTemp = (index, key, value) => {
+    const val = parseInt(value) || 0;
+    tempStreakMilestones[index][key] = val;
+};
+
+// 3. ฟังก์ชันเพิ่มแถวใหม่
+window.addStreakLevelRow = () => {
+    // หาค่าวันสูงสุดที่มีอยู่ แล้วบวกเพิ่มไปอีกหน่อย (User Experience)
+    const maxDay = tempStreakMilestones.length > 0 
+        ? Math.max(...tempStreakMilestones.map(m => m.days)) 
+        : 0;
+        
+    tempStreakMilestones.push({ days: maxDay + 7, bonus: 100 }); // ค่าเริ่มต้น
+    renderStreakSettingsUI();
+};
+
+// 4. ฟังก์ชันลบแถว
+window.removeStreakLevelRow = (index) => {
+    if(confirm('ลบระดับนี้?')) {
+        tempStreakMilestones.splice(index, 1);
+        renderStreakSettingsUI();
+    }
+};
+
 // 2. บันทึก Config (กดปุ่ม Save)
 window.saveStreakConfig = async () => {
     const base = parseInt(document.getElementById('conf-streak-base').value) || 10;
-    let milestones = [];
-    for(let i=1; i<=5; i++) {
-        milestones.push({
-            days: parseInt(document.getElementById(`conf-streak-d${i}`).value) || 0,
-            bonus: parseInt(document.getElementById(`conf-streak-p${i}`).value) || 0
-        });
-    }
-    // เรียงลำดับวัน
-    milestones.sort((a, b) => a.days - b.days);
+    
+    // ✅ ใช้ข้อมูลจากตัวแปร tempStreakMilestones แทนการวนลูป for(1..5)
+    // กรองเอาอันที่วันเป็น 0 หรือติดลบออกเพื่อความชัวร์
+    const cleanMilestones = tempStreakMilestones
+        .filter(m => m.days > 0)
+        .sort((a, b) => a.days - b.days); // เรียงตามวันจากน้อยไปมากเสมอ
 
-    const newData = { base_points: base, milestones: milestones };
+    const newData = { 
+        base_points: base, 
+        milestones: cleanMilestones // บันทึกเป็น Array ลงไปเลย
+    };
+
     try {
         await setDoc(doc(db, 'artifacts', appId, 'public', 'config_streak'), newData);
-        streakConfig = newData;
-        alert('บันทึกตั้งค่าเรียบร้อย ✅');
-    } catch(e) { alert('Error: ' + e.message); }
+        
+        // อัปเดตค่า Local ทันทีเพื่อให้ UI ไม่กระตุก
+        streakConfig = newData; 
+        
+        showToast('✅ บันทึกการตั้งค่า Streak เรียบร้อย');
+    } catch(e) { 
+        console.error(e);
+        alert('Error: ' + e.message); 
+    }
 };
 
 // 3. แสดงผลหน้า Dashboard (เรียก function นี้ใน renderStudentDashboard)
@@ -562,6 +634,7 @@ function renderStreakWidget(student) {
         btn.classList.remove('bg-gray-400', 'cursor-not-allowed');
         btn.classList.add('from-orange-500', 'to-red-500');
         timer.classList.add('hidden');
+        
     } else {
         btn.disabled = true;
         btn.innerHTML = "✅ รับแล้ว";
@@ -600,99 +673,117 @@ function checkCanClaim(lastClaimTimestamp) {
 // ✅ ฟังก์ชันเช็คชื่อรายวัน (ฉบับอัปเดต: อายัดแต้มถ้ามีใบเตือน)
 // ==========================================
 window.claimDailyStreak = async () => {
+    // 1. 🔒 UI Blocking: ล็อกปุ่มทันทีที่กด (ด่านหน้า)
+    const btn = document.getElementById('btn-claim-streak');
+    const originalText = btn ? btn.innerHTML : '';
+    
+    if(btn) {
+        if(btn.disabled) return; // กันกดซ้ำในฝั่ง Client
+        btn.disabled = true;
+        btn.innerHTML = '<span class="animate-pulse">⏳ กำลังประมวลผล...</span>';
+        btn.classList.add('bg-gray-400', 'cursor-not-allowed');
+    }
+
     if (!currentStudentData) return;
-    
-    const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id);
-    
-    // ดึงข้อมูลล่าสุดมาเช็ค
-    const sSnap = await getDoc(sRef);
-    const sData = sSnap.data();
-    const streakData = sData.streak_data || { count: 0, last_claim: null, max: 0 };
-    
-    // เช็คว่ากดรับไปหรือยัง
-    if (!checkCanClaim(streakData.last_claim)) return showToast('วันนี้รับไปแล้วครับ พรุ่งนี้มาใหม่นะ', 'error');
-
-    // คำนวณ Streak
-    let newCount = streakData.count;
-    const last = streakData.last_claim ? (streakData.last_claim.toDate ? streakData.last_claim.toDate() : new Date(streakData.last_claim)) : null;
-    const now = new Date();
-
-    if (last) {
-        const diffHours = (now - last) / (1000 * 60 * 60);
-        if (diffHours > 48) { // เกิน 48 ชม. (ขาดเช็คชื่อเมื่อวาน)
-            newCount = 1;
-        } else {
-            newCount++;
-        }
-    } else {
-        newCount = 1;
-    }
-    
-    const newMax = Math.max(streakData.max, newCount);
-    let pointsToAdd = streakConfig.base_points;
-    let logMsg = `เช็คชื่อรายวัน (Day ${newCount})`;
-
-    // เช็คโบนัส Milestone
-    const milestone = streakConfig.milestones.find(m => m.days === newCount);
-    if (milestone) {
-        pointsToAdd += milestone.bonus;
-        logMsg += ` + โบนัส ${milestone.days} วัน!`;
-        alert(`🎉 ยินดีด้วย! คุณเช็คชื่อครบ ${newCount} วัน ได้รับโบนัส ${milestone.bonus} แต้ม!`);
-    }
 
     try {
-        const batch = writeBatch(db);
-        
-        // 1. ✅ ประกาศตัวแปร updates (สำคัญมาก! ต้องมีบรรทัดนี้)
-        const updates = {
-            streak_data: { count: newCount, max: newMax, last_claim: serverTimestamp() }
-        };
+        const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id);
 
-        // 2. 🔥 เช็คใบเตือนเพื่ออายัดแต้ม
-        // (ใช้ warning_cards ตามระบบใหม่ที่เราเพิ่งเปลี่ยน)
-        const warningCount = sData.warning_cards || 0;
-        
-        if (warningCount > 0) {
-            // กรณีมีใบเตือน -> เข้าแต้มอายัด (Pending)
-            updates.pending_points = increment(pointsToAdd);
-            logMsg += ` (ถูกอายัดจากใบเตือน ${warningCount} ใบ)`;
-            
-            // แจ้งเตือนนักเรียน
-            setTimeout(() => {
-                alert(`⚠️ คุณมีใบเตือน ${warningCount} ใบ!\nแต้มความขยัน ${pointsToAdd} แต้ม ถูกอายัดชั่วคราว จนกว่าจะล้างโทษหมดครับ`);
-            }, 500);
-            
-        } else {
-            // กรณีปกติ -> เข้ากระเป๋าหลักทันที
-            updates.points = increment(pointsToAdd);
-        }
+        // 2. 🛡️ Transaction: หัวใจสำคัญ (ทำงานแบบ Atomic)
+        await runTransaction(db, async (transaction) => {
+            // A. อ่านข้อมูลล่าสุดสดๆ จาก Server (ห้ามใช้ตัวแปร global เก่า)
+            const sDoc = await transaction.get(studentRef);
+            if (!sDoc.exists()) throw "ไม่พบข้อมูลนักเรียน";
 
-        // 3. สั่งอัปเดตข้อมูลนักเรียน
-        batch.update(sRef, updates);
-        
-        // 4. บันทึกประวัติ
-        const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
-        batch.set(hRef, {
-            student_id: sData.student_id,
-            student_name: sData.full_name,
-            action: logMsg,
-            amount: pointsToAdd,
-            type: 'daily_streak',
-            timestamp: serverTimestamp()
+            const sData = sDoc.data();
+            const streakData = sData.streak_data || { count: 0, last_claim: null, max: 0 };
+
+            // B. เช็คเงื่อนไข (Server-side Validation)
+            // ถ้ามีรายการไหนเช็คผ่านไปแล้ว Transaction รายการถัดไปจะมาติดตรงนี้และถูกดีดออก
+            if (!checkCanClaim(streakData.last_claim)) {
+                throw "วันนี้คุณกดเช็กชื่อรับแต้มไปแล้วครับ";
+            }
+
+            // C. คำนวณ Streak และแต้ม (Logic เดิม)
+            let newCount = streakData.count;
+            const last = streakData.last_claim ? (streakData.last_claim.toDate ? streakData.last_claim.toDate() : new Date(streakData.last_claim)) : null;
+            const now = new Date();
+
+            if (last) {
+                const diffHours = (now - last) / (1000 * 60 * 60);
+                if (diffHours > 48) newCount = 1;
+                else newCount++;
+            } else {
+                newCount = 1;
+            }
+            
+            const newMax = Math.max(streakData.max, newCount);
+            
+            // คำนวณแต้ม (ดึงจาก Config Global)
+            let pointsToAdd = streakConfig ? (streakConfig.base_points || 10) : 10;
+            let milestoneBonus = 0;
+            
+            if (streakConfig && streakConfig.milestones) {
+                const milestone = streakConfig.milestones.find(m => m.days === newCount);
+                if (milestone) {
+                    milestoneBonus = milestone.bonus;
+                    pointsToAdd += milestone.bonus;
+                }
+            }
+
+            // D. เตรียมข้อมูลอัปเดต
+            const updates = {
+                streak_data: { count: newCount, max: newMax, last_claim: serverTimestamp() }
+            };
+
+            const warningCount = sData.warning_cards || 0;
+            let logMsg = `เช็คชื่อรายวัน (Day ${newCount})`;
+            if (milestoneBonus > 0) logMsg += ` + โบนัส ${newCount} วัน!`;
+
+            // เช็คใบเตือนเพื่ออายัดแต้ม
+            if (warningCount > 0) {
+                updates.pending_points = increment(pointsToAdd);
+                logMsg += ` (ถูกอายัดจากใบเตือน ${warningCount} ใบ)`;
+            } else {
+                updates.points = increment(pointsToAdd);
+            }
+
+            // E. เขียนลงฐานข้อมูล (ต้องทำใน Transaction เท่านั้น)
+            transaction.update(studentRef, updates);
+            
+            // บันทึกประวัติ (สร้าง Ref ใหม่แล้วสั่ง set ใน transaction)
+            const newHistoryRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+            transaction.set(newHistoryRef, {
+                student_id: sData.student_id,
+                student_name: sData.full_name,
+                action: logMsg,
+                amount: pointsToAdd,
+                type: 'daily_streak',
+                timestamp: serverTimestamp()
+            });
         });
 
-        await batch.commit();
+        // 3. ✅ สำเร็จ
+        showToast('✅ เช็คชื่อสำเร็จ!');
+        // ไม่ต้องปลดล็อกปุ่ม เพราะเช็คเสร็จแล้วปุ่มควรจะเป็นสถานะ "รับแล้ว" (ซึ่ง renderStudentDashboard จะจัดการต่อเองเมื่อข้อมูล Realtime มาถึง)
+
+    } catch (e) {
+        console.error(e);
+        const msg = typeof e === 'string' ? e : e.message;
         
-        // แสดงผล Toast
-        if (warningCount > 0) {
-            showToast(`✅ เช็คชื่อสำเร็จ (แต้มถูกอายัด)`);
+        // ถ้าเป็น error ที่เรา throw เอง (เช็คไปแล้ว) ให้แจ้งเตือนเบาๆ
+        if (msg.includes('เช็กชื่อไปแล้ว')) {
+            showToast('⚠️ วันนี้เช็กชื่อไปแล้วครับ', 'warning');
         } else {
-            showToast(`✅ เช็คชื่อสำเร็จ! +${pointsToAdd} แต้ม`);
+            showToast('❌ เกิดข้อผิดพลาด: ' + msg, 'error');
         }
 
-    } catch(e) { 
-        console.error(e); 
-        alert('Error: ' + e.message); 
+        // กรณี Error ให้ปลดล็อกปุ่มเพื่อให้ลองใหม่ได้
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            btn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+        }
     }
 };
 
@@ -1350,9 +1441,7 @@ window.renderStudentList = (resetPage = true) => {
     updateBulkUI();
 };
 
-
-
-function renderStudentDashboard() {
+window.renderStudentDashboard = (student) => {
     if (!currentStudentData) return;
     const s = currentStudentData;
     const interest = calculatePendingInterest(s);
@@ -1413,15 +1502,15 @@ function renderStudentDashboard() {
                 <p class="text-xs text-gray-400">${formatFirestoreTimestamp(h.timestamp)}</p>
             </div>
             <span class="font-bold ${isPositive ? 'text-green-600' : 'text-red-500'}">
-                ${isPositive ? '+' : '-'}${h.amount}
+                ${isPositive ? '+' : '-'}${Math.floor(Math.abs(h.amount)).toLocaleString()}
             </span>
         </div>
     `;
 }).join('') : '<p class="text-gray-400 text-center py-2">ยังไม่มีประวัติ</p>';
     renderStudentInventory(s); // เรียกฟังก์ชันแสดงกระเป๋า
     renderStreakWidget(currentStudentData); // แสดง Widget เช็คชื่อ
+    
 }
-
 
 // Exposed to window for inline HTML calls
 window.renderBankList = () => {
@@ -1532,7 +1621,7 @@ function renderRewards() {
             let stockLabel = isUnlimited ? 'ไม่จำกัด' : `${r.stock} ชิ้น`;
             
             // ปรับ UI ตามประเภท (งาน vs รางวัล)
-            const pointsLabel = isGain ? `+${Math.abs(r.points)} แต้ม` : `🪙 ${r.points} แต้ม`;
+            const pointsLabel = isGain ? `+${Math.abs(r.points)} แต้ม` : `💵 ${(r.points).toLocaleString()} แต้ม`;
             const pointsBg = isGain ? 'bg-green-100 text-green-700' : 'bg-amber-50 text-amber-600';
             const btnText = disabled ? (hasStock ? 'แต้มไม่พอ' : 'หมดแล้ว') : (isGain ? 'ส่งงาน / รับแต้ม' : 'แลกรางวัล โปรดติดต่อครู');
             const btnColor = disabled ? 'bg-gray-300 cursor-not-allowed' : (isGain ? 'bg-indigo-600 hover:bg-indigo-700 shadow-sm' : 'bg-green-500 hover:bg-green-600 shadow-sm');
@@ -1664,7 +1753,7 @@ window.renderHistory = (resetPage = true) => {
         const isPositive = !isNegative || h.type === 'bank_withdraw' || h.type === 'withdraw';
 
         // จัดรูปแบบตัวเลข
-        const amountVal = Math.abs(h.amount).toLocaleString();
+        const amountVal = Math.floor(Math.abs(h.amount)).toLocaleString();
         
         // กำหนดสีและเครื่องหมาย
         const amountHtml = !isPositive 
@@ -4436,11 +4525,10 @@ ${item.image || '📦'}
     `).join('');
 }
 
-// Update Student Dashboard Render
+/* Update Student Dashboard Render
 const originalRenderDash = window.renderStudentDashboard || (() => {});
 window.renderStudentDashboard = () => {
-    // Run original logic (copy-pasted manually inside original function if needed, or overwrite)
-    // Since we can't easily hook, let's assume you update the original function to call renderStudentInventory(s)
+  
     if (!currentStudentData) return;
     // ... (Original Code) ...
     // Add this line at the end of original renderStudentDashboard:
@@ -4452,7 +4540,8 @@ window.renderStudentDashboard = () => {
     // Re-implementing parts for safety:
     document.getElementById('std-dash-points').textContent = Math.floor(currentStudentData.points);
     // ... other UI updates ...
-};
+    
+};*/
 
 // Item Usage Logic
 // Item Usage Logic (ฉบับอัปเกรด: เพิ่มระบบเรทสุ่มรางวัลใหญ่ยาก) [cite: 658-673]
@@ -4798,7 +4887,7 @@ window.useItem = async (itemId, itemName) => {
             }
         }
         else if (inventoryItem.type === 'instant_interest') {
-            const interest = math.floor(calculatePendingInterest(s));
+            const interest = Math.floor(calculatePendingInterest(s));
             const newPrincipal = (s.bank_points || 0) + interest;
             const endTime = new Date();
             endTime.setHours(endTime.getHours() + (inventoryItem.hours || 24));
@@ -8464,8 +8553,8 @@ window.renderStockMarket = () => {
     }).join('');
 
     // 2. อัปเดตสรุปพอร์ตด้านบน
-    document.getElementById('stock-cash-balance').textContent = currentStudentData.points.toLocaleString();
-    document.getElementById('portfolio-total-value').textContent = totalPortfolioValue.toLocaleString();
+    document.getElementById('stock-cash-balance').textContent = Math.floor(currentStudentData.points).toLocaleString();
+    document.getElementById('portfolio-total-value').textContent = Math.floor(totalPortfolioValue).toLocaleString();
     
     const holdingCount = myPortfolio.filter(p => p.amount > 0).length;
     document.getElementById('stock-count-hold').textContent = `${holdingCount} รายการ`;
