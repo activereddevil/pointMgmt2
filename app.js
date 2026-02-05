@@ -1426,6 +1426,9 @@ window.renderStudentList = (resetPage = true) => {
                     <button onclick="openBankModal('${s.id}')" class="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg border border-green-200 transition-colors" title="ธุรกรรมธนาคาร">
                         🏦
                     </button>
+                    <button onclick="openAdminInventory('${s.id}')" class="p-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors" title="จัดการกระเป๋า (ลบของ)">
+                        🎒
+                    </button>
                     
                     <button onclick="openEditStudentModal('${s.id}')" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="แก้ไข">
                         ✏️
@@ -10095,5 +10098,124 @@ window.confirmGiveBuff = async () => {
     } catch (e) {
         console.error(e);
         alert('Error: ' + e.message);
+    }
+};
+
+// ==========================================
+// 🎒 ระบบจัดการกระเป๋า (Admin Delete Item)
+// ==========================================
+
+// 1. เปิดหน้าต่างจัดการกระเป๋า
+window.openAdminInventory = (studentId) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    // ตั้งชื่อหัวข้อ
+    document.getElementById('admin-inv-name').innerText = student.full_name;
+    
+    // ดึงข้อมูลกระเป๋า
+    const list = document.getElementById('admin-inv-list');
+    const emptyMsg = document.getElementById('admin-inv-empty');
+    list.innerHTML = '';
+
+    const inventory = student.inventory || [];
+
+    if (inventory.length === 0) {
+        emptyMsg.classList.remove('hidden');
+    } else {
+        emptyMsg.classList.add('hidden');
+        
+        // วนลูปสร้างรายการ
+        inventory.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = "bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex justify-between items-center hover:shadow-md transition";
+            
+            // ตกแต่งไอคอนตามประเภท
+            let icon = '📦';
+            if(item.type?.includes('gacha')) icon = '🎲';
+            if(item.is_coupon) icon = '🎫';
+            
+            div.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shadow-inner">
+                        ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover rounded-full">` : icon}
+                    </div>
+                    <div>
+                        <div class="font-bold text-gray-800 text-sm">${item.name || 'ไอเทมไม่มีชื่อ'}</div>
+                        <div class="text-[10px] text-gray-400 flex gap-2">
+                             <span>ประเภท: ${item.type || 'ทั่วไป'}</span>
+                             <span>• ได้เมื่อ: ${item.acquired_at ? new Date(item.acquired_at.seconds * 1000).toLocaleDateString('th-TH') : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="deleteInventoryItem('${student.id}', ${index}, '${item.name}')" 
+                    class="bg-red-50 text-red-500 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-red-100">
+                    🗑️ ลบ
+                </button>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    document.getElementById('modal-admin-inventory').classList.remove('hidden');
+};
+
+// 2. ปิดหน้าต่าง
+window.closeAdminInventory = () => {
+    document.getElementById('modal-admin-inventory').classList.add('hidden');
+};
+
+// 3. ฟังก์ชันลบไอเทม (Core Logic)
+window.deleteInventoryItem = async (studentId, itemIndex, itemName) => {
+    // ถามยืนยันก่อนลบ
+    const confirmResult = await Swal.fire({
+        title: 'ยืนยันการลบ?',
+        html: `คุณต้องการลบไอเทม <b>"${itemName}"</b> <br>ออกจากกระเป๋านักเรียนใช่หรือไม่?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#9ca3af',
+        confirmButtonText: 'ลบเลย',
+        cancelButtonText: 'ยกเลิก'
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+        showLoading(true);
+        const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentId);
+        
+        // ⚠️ ต้องดึงข้อมูลล่าสุดจาก DB ก่อนลบ เพื่อกัน Index เคลื่อน
+        const sSnap = await getDoc(sRef);
+        if (!sSnap.exists()) throw "ไม่พบข้อมูลนักเรียน";
+        
+        const currentData = sSnap.data();
+        let currentInv = currentData.inventory || [];
+
+        // เช็คว่า Index นั้นยังมีอยู่ไหม
+        if (!currentInv[itemIndex]) {
+            throw "ไม่พบไอเทม (อาจถูกลบไปแล้ว)";
+        }
+
+        // 🗑️ ตัดไอเทมออกจาก Array
+        currentInv.splice(itemIndex, 1);
+
+        // บันทึกกลับ
+        await updateDoc(sRef, { inventory: currentInv });
+
+        showLoading(false);
+        closeAdminInventory(); // ปิดหน้าต่างก่อน (เพื่อให้โหลดใหม่รอบหน้า)
+        
+        Swal.fire({
+            icon: 'success',
+            title: 'ลบเรียบร้อย',
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+    } catch (e) {
+        console.error(e);
+        showLoading(false);
+        Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + e.message, 'error');
     }
 };
