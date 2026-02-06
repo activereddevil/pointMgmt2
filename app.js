@@ -1426,6 +1426,9 @@ window.renderStudentList = (resetPage = true) => {
                     <button onclick="openBankModal('${s.id}')" class="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg border border-green-200 transition-colors" title="ธุรกรรมธนาคาร">
                         🏦
                     </button>
+                    <button onclick="openDonateGuildModal('${s.id}')" class="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors" title="บริจาคเข้ากิลด์">
+                        🤝
+                    </button>
                     <button onclick="openAdminInventory('${s.id}')" class="p-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors" title="จัดการกระเป๋า (ลบของ)">
                         🎒
                     </button>
@@ -1535,6 +1538,7 @@ window.sortRewards = (field) => {
 function renderRewards() {
     const tbody = document.getElementById('rewards-list');
     const headerRow = document.querySelector('#rewards-table-container thead tr');
+    const generalRewards = rewards.filter(r => r.shop_type !== 'guild');
     
     // 1. อัปเดตหัวตารางให้กดเรียงได้ (Inject HTML Headers)
     if (headerRow) {
@@ -1551,7 +1555,7 @@ function renderRewards() {
 
     if (userRole === 'teacher' && tbody) {
         // 2. เตรียมข้อมูลและเรียงลำดับ
-        let displayRewards = [...rewards];
+        let displayRewards = [...generalRewards];
 
         displayRewards.sort((a, b) => {
             let valA = a[currentRewardSort.field];
@@ -1610,7 +1614,7 @@ function renderRewards() {
     // Student view (Grid)
     const grid = document.getElementById('rewards-grid');
     if (userRole === 'student' && grid) {
-        grid.innerHTML = rewards.map(r => {
+        grid.innerHTML = generalRewards.map(r => {
             // --- 🟢 ส่วนที่แก้: Logic แสดงผลฝั่งนักเรียน ---
             const isGain = r.points < 0; // ถ้าแต้มติดลบ แปลว่า "แจกแต้ม"
             
@@ -1656,142 +1660,228 @@ function renderRewards() {
 
 // Exposed to window for inline HTML calls
 // ✅ ฟังก์ชันแสดงประวัติ (ฉบับอัปเกรด: แยกสีแดง/เขียว ตามประเภทธุรกรรม)
+// ✅ ฟังก์ชันแสดงประวัติ (ฉบับอัปเกรด: แยกสีแดง/เขียว ตามประเภทธุรกรรม)
+// ==========================================
+// 📜 แสดงประวัติ (History) - เวอร์ชันสมบูรณ์ (Filter + Pagination)
+// ==========================================
+
+// ตั้งค่า Pagination State (ถ้ายังไม่มี)
+window.paginationState = window.paginationState || { history: 1 };
+const ITEMS_PER_PAGE = 10; // จำนวนรายการต่อหน้า
+
 window.renderHistory = (resetPage = true) => {
+    // 1. รีเซ็ตหน้า ถ้ามีการค้นหาใหม่
     if (resetPage) paginationState.history = 1;
+
     const tbody = document.getElementById('history-list');
-    const searchText = document.getElementById('history-search-input').value.toLowerCase(); // คำค้นหา
-    const searchType = document.getElementById('history-action-filter').value; // ประเภทที่เลือกจาก Dropdown
+    
+    // ดึงค่าจาก HTML (ใส่ fallback ป้องกัน Error ถ้าหา Element ไม่เจอ)
+    const searchInput = document.getElementById('history-search-input'); 
+    const filterInput = document.getElementById('history-action-filter');
 
-    // กรองข้อมูล
-    let filtered = history.filter(h => {
+    const searchText = (searchInput ? searchInput.value : '').toLowerCase().trim();
+    const searchType = filterInput ? filterInput.value : '';
+
+    if (!tbody) return;
+
+    // 2. กรองข้อมูล (Logic ของคุณ + Safe Check)
+    let filtered = history.filter(h => { // ใช้ historyData แทน history
+        
         // --- ส่วนที่ 1: เช็คคำค้นหา (ชื่อ/รหัส) ---
-        let searchableId = h.student_id;
+        let searchableId = String(h.student_id || '');
         const foundStudent = students.find(s => s.id === h.student_id);
-        if (foundStudent) searchableId = foundStudent.student_id;
+        if (foundStudent) searchableId = String(foundStudent.student_id || '');
 
+        const name = (h.student_name || '').toLowerCase();
+        const reason = (h.reason || h.details || '').toLowerCase(); // รองรับทั้ง reason และ details
+        
         const isTextMatch = (
-            searchText === '' || // ถ้าไม่พิมพ์อะไรเลยถือว่าผ่าน
-            h.student_name.toLowerCase().includes(searchText) || 
-            String(searchableId).toLowerCase().includes(searchText) ||
-            (h.reason && h.reason.toLowerCase().includes(searchText))
+            searchText === '' || 
+            name.includes(searchText) || 
+            searchableId.includes(searchText) ||
+            reason.includes(searchText)
         );
 
-       // เราต้องแปลงค่าจาก Dropdown ให้ตรงกับความจริงใน Database
-       let isTypeMatch = false;
+        // --- ส่วนที่ 2: เช็คประเภท (Logic ของคุณ) ---
+        let isTypeMatch = false;
+        const type = h.type || '';
+        const action = h.action || '';
 
-       if (searchType === '') {
-           isTypeMatch = true; // ถ้าเลือก "ทุกรายการ" ให้ผ่านหมด
-       } 
-       else if (searchType === 'check_in') {
-           // เช็คชื่อ: ใน DB ใช้ 'daily_streak'
-           isTypeMatch = (h.type === 'daily_streak');
-       }
-       else if (searchType === 'gacha') {
-           // กาชา: ให้หาทั้ง Type และดูชื่อรายการว่ามีคำว่า "กล่องสุ่ม" หรือไม่
-           isTypeMatch = (
-               h.type === 'gacha' || 
-               h.type === 'gacha_custom' || 
-               h.type === 'gacha_refund' ||
-               (h.action && h.action.includes('กล่องสุ่ม')) ||
-               (h.action && h.action.includes('Gacha'))
-           );
-       }
-       else if (searchType === 'punishment') {
-           // บทลงโทษ: ใน DB อาจเป็น 'warning_card_log' หรือ 'deduct_points'
-           isTypeMatch = (h.type === 'warning_card_log' || h.type === 'punishment');
-       }
-       else if (searchType === 'deduct_points') {
-           // หักแต้ม: ใน DB มักใช้ 'remove_points'
-           isTypeMatch = (h.type === 'remove_points' || h.type === 'deduct_points');
-       }
-       else if (searchType === 'create_guild') {
-           // สร้างกิลด์: ดูที่ Action text
-           isTypeMatch = (h.type === 'create_guild' || (h.action && h.action.includes('สร้างกิลด์')));
-       }
-       else if (searchType === 'quest_complete') {
-        isTypeMatch = (
-            h.type === 'quest_complete' || 
-            h.type === 'mission' ||   // เผื่ออนาคตใช้คำว่า mission
-            h.type === 'job' ||       // เผื่อเป็นระบบงาน
-            (h.action && (h.action.includes('ภารกิจ') || h.action.includes('Quest') || h.action.includes('ตอบคำถาม')))
-        );
-    }
-       else {
-           // กรณีอื่นๆ (ฝาก/ถอน) มักจะตรงกันอยู่แล้ว เช็คแบบปกติได้เลย
-           isTypeMatch = (h.type === searchType);
-       }
+        if (searchType === '') {
+            isTypeMatch = true;
+        } 
+        else if (searchType === 'check_in') {
+            isTypeMatch = (type === 'daily_streak');
+        }
+        else if (searchType === 'gacha') {
+            isTypeMatch = (
+                type === 'gacha' || type === 'gacha_custom' || type === 'gacha_refund' ||
+                action.includes('กล่องสุ่ม') || action.includes('Gacha')
+            );
+        }
+        else if (searchType === 'punishment') {
+            isTypeMatch = (type === 'warning_card_log' || type === 'punishment' || type === 'penalty');
+        }
+        else if (searchType === 'deduct_points') {
+            isTypeMatch = (type === 'remove_points' || type === 'deduct_points');
+        }
+        else if (searchType === 'create_guild') {
+            isTypeMatch = (type === 'create_guild' || action.includes('สร้างกิลด์'));
+        }
+        else if (searchType === 'quest_complete') {
+            isTypeMatch = (
+                type === 'quest_complete' || type === 'mission' || type === 'job' || 
+                action.includes('ภารกิจ') || action.includes('Quest') || action.includes('ตอบคำถาม')
+            );
+        }
+        else if (searchType === 'bank') { // เพิ่มธนาคารให้
+             isTypeMatch = type.includes('bank');
+        }
+        else if (searchType === 'guild') { // เพิ่มกิลด์ให้
+             isTypeMatch = type.includes('guild');
+        }
+        else {
+            isTypeMatch = (type === searchType);
+        }
 
-        // 🔥 ต้องตรงทั้ง 2 เงื่อนไข (AND)
         return isTextMatch && isTypeMatch; 
     });
 
-    // เรียงลำดับ (ใหม่สุดขึ้นก่อน)
-    filtered.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+    // 3. เรียงลำดับ (ใหม่สุดขึ้นก่อน)
+    filtered.sort((a, b) => {
+        const tA = a.timestamp ? (a.timestamp.seconds || new Date(a.timestamp).getTime()/1000) : 0;
+        const tB = b.timestamp ? (b.timestamp.seconds || new Date(b.timestamp).getTime()/1000) : 0;
+        return tB - tA;
+    });
 
-    // Pagination
-    const { data: paginatedData } = getPaginatedData(filtered, paginationState.history);
+    // 4. Pagination Logic (ตัดแบ่งหน้า)
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    const currentPage = Math.min(Math.max(1, paginationState.history), totalPages || 1);
     
-    tbody.innerHTML = paginatedData.map(h => {
-        let dateStr = formatFirestoreTimestamp(h.timestamp);
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const paginatedData = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-        // 🔥 LOGIC การแสดงผล +/-
-        // รายการที่ถือว่าเป็นรายจ่าย (ต้องติดลบ)
+    // 5. แสดงผลลงตาราง
+    if (paginatedData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-400">ไม่พบข้อมูลประวัติ</td></tr>`;
+        document.getElementById('pagination-history').innerHTML = ''; // ล้างปุ่มกด
+        return;
+    }
+
+    tbody.innerHTML = paginatedData.map(h => {
+        // แปลงเวลา (Helper ในตัว)
+        let dateStr = '-';
+        if (h.timestamp) {
+            const d = h.timestamp.toDate ? h.timestamp.toDate() : new Date(h.timestamp);
+            dateStr = d.toLocaleString('th-TH', { 
+                day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' 
+            });
+        }
+
+        // Logic การแสดงผล +/- (ของคุณ)
         const expenseTypes = [
-            'buy_item',         // ซื้อของ
-            'bank_deposit',     // ฝากเงิน (เงินออกจากกระเป๋า)
-            'deposit',
-            'punishment',       // บทลงโทษ
-            'deduct_points',    // หักแต้ม
-            'remove_points',
-            'create_guild',     // สร้างกิลด์
-            'gacha',            // สุ่มกาชา
-            'clear_red_card',   // ล้างใบแดง
-            'redeem'            // แลกของรางวัล
+            'buy_item', 'bank_deposit', 'deposit', 'punishment', 'penalty',
+            'deduct_points', 'remove_points', 'create_guild', 
+            'gacha', 'clear_red_card', 'redeem', 'guild_use_item'
         ];
 
-        // เช็คว่าเป็นรายจ่าย หรือ ค่าในฐานข้อมูลติดลบอยู่แล้ว
-        const isNegative = expenseTypes.includes(h.type) || h.amount < 0 || h.action.includes('ถอน'); // ดักคำว่าถอนเผื่อไว้
+        const isNegative = expenseTypes.includes(h.type) || h.amount < 0 || (h.action || '').includes('ถอน');
         
-        // ถ้าเป็น 'bank_withdraw' (ถอนเงิน) ต้องเป็นบวก (เงินเข้ากระเป๋า)
-        const isPositive = !isNegative || h.type === 'bank_withdraw' || h.type === 'withdraw';
+        // ยกเว้น bank_withdraw คือได้เงิน (+)
+        const isPositive = (!isNegative || h.type === 'bank_withdraw' || h.type === 'withdraw') && !(h.amount < 0 && h.type !== 'bank_withdraw');
 
-        // จัดรูปแบบตัวเลข
-        const amountVal = Math.floor(Math.abs(h.amount)).toLocaleString();
+        const amountVal = Math.floor(Math.abs(h.amount || 0)).toLocaleString();
         
-        // กำหนดสีและเครื่องหมาย
         const amountHtml = !isPositive 
             ? `<span class="text-red-600 font-bold">-${amountVal}</span>` 
             : `<span class="text-green-600 font-bold">+${amountVal}</span>`;
 
-        let displayStudentID = h.student_id;
+        // หา ID นักเรียน
+        let displayStudentID = h.student_id || '-';
         const foundStudent = students.find(s => s.id === h.student_id);
-        
-        if (foundStudent) {
-            // ถ้าเจอ ให้ใช้เลขประจำตัวนักเรียน (field: student_id) มาโชว์แทน
-            displayStudentID = foundStudent.student_id;
-        }
+        if (foundStudent) displayStudentID = foundStudent.student_id;
 
         return `
-        <tr class="hover:bg-gray-50 border-b last:border-b-0 text-sm group">
+        <tr class="hover:bg-gray-50 border-b last:border-b-0 text-sm group transition-colors">
             <td class="px-4 py-3 text-gray-500 whitespace-nowrap">${dateStr}</td>
-
-            <td class="px-4 py-3 font-bold text-gray-700">${h.student_name}</td>
+            <td class="px-4 py-3 font-bold text-gray-700">
+                ${h.student_name || 'ไม่ระบุชื่อ'} <br>
+                <span class="text-[10px] text-gray-400 font-normal">${displayStudentID}</span>
+            </td>
             <td class="px-4 py-3">
                 <div class="flex flex-col">
                     <span class="font-bold text-gray-800">${h.action}</span>
-                    ${h.reason ? `<span class="text-xs text-gray-400">${h.reason}</span>` : ''}
+                    <span class="text-xs text-gray-400">${h.reason || h.details || ''}</span>
                 </div>
             </td>
             <td class="px-4 py-3 text-right text-base">${amountHtml}</td>
             <td class="px-4 py-3 text-center">
-                <button onclick="deleteHistoryItem('${h.id}')" class="text-gray-300 hover:text-red-500 p-1 transition-colors" title="ลบรายการ">🗑️</button>
+                <button onclick="deleteHistoryItem('${h.id}')" class="text-gray-300 hover:text-red-500 p-1 transition-colors bg-white rounded-full hover:bg-red-50" title="ลบรายการ">🗑️</button>
             </td>
-        </tr>
-        `;
+        </tr>`;
     }).join('');
 
-    document.getElementById('pagination-history').innerHTML = renderPaginationControls(filtered.length, 'history');
+    // 6. วาดปุ่มเปลี่ยนหน้า
+    renderPaginationControls(totalItems, 'history', ITEMS_PER_PAGE);
 };
+
+// ==========================================
+// 🔧 Helper Functions (ใส่ไว้ท้ายไฟล์ app.js)
+// ==========================================
+
+// ฟังก์ชันลบประวัติ (Stub)
+window.deleteHistoryItem = async (id) => {
+    const confirm = await Swal.fire({
+        title: 'ยืนยันลบประวัติ?',
+        text: "รายการนี้จะหายไปถาวร แต่จะไม่กระทบแต้มปัจจุบัน",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'ลบเลย'
+    });
+
+    if (confirm.isConfirmed) {
+        try {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', id));
+            showToast('ลบรายการเรียบร้อย');
+            // Data จะ update เองผ่าน Snapshot หรือให้เรียก renderHistory()
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'ลบไม่สำเร็จ', 'error');
+        }
+    }
+};
+
+// ฟังก์ชันวาดปุ่ม Pagination
+window.renderPaginationControls = (totalItems, context, perPage = 10) => {
+    const container = document.getElementById(`pagination-${context}`);
+    if (!container) return;
+
+    const totalPages = Math.ceil(totalItems / perPage);
+    const currentPage = paginationState[context];
+
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = `
+    <div class="flex justify-center items-center space-x-2 mt-4">
+        <button onclick="changePage('${context}', -1)" ${currentPage === 1 ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:bg-gray-200"'} class="px-3 py-1 rounded border text-sm">◀</button>
+        <span class="text-sm font-bold text-gray-600">หน้า ${currentPage} / ${totalPages}</span>
+        <button onclick="changePage('${context}', 1)" ${currentPage === totalPages ? 'disabled class="opacity-30 cursor-not-allowed"' : 'class="hover:bg-gray-200"'} class="px-3 py-1 rounded border text-sm">▶</button>
+    </div>`;
+    
+    container.innerHTML = html;
+};
+
+// ฟังก์ชันเปลี่ยนหน้า
+window.changePage = (context, direction) => {
+    paginationState[context] += direction;
+    if (context === 'history') renderHistory(false); // false = ไม่ต้อง reset หน้า 1
+};
+
 
 // --- HELPER: CUSTOM CONFIRM MODAL ---
 let pendingConfirmAction = null;
@@ -2579,6 +2669,7 @@ window.openStudentRedeemModal = (studentId) => {
 // ค้นหาฟังก์ชัน renderShopGrid ในไฟล์ app.js แล้ววางทับด้วยโค้ดนี้ครับ
 function renderShopGrid() {
     const grid = document.getElementById('shop-grid');
+    const generalItems = rewards.filter(r => r.shop_type !== 'guild');
     
     if (typeof selectedStudentForRedeem === 'undefined' || !selectedStudentForRedeem) {
         grid.innerHTML = '<p class="text-center text-gray-500 w-full col-span-3">ไม่พบข้อมูลนักเรียน</p>';
@@ -2592,9 +2683,9 @@ function renderShopGrid() {
          return;
     }
     const currentInv = (s.inventory || []).length;
-    const isBagFull = currentInv >= 3; // (เลข 3 คือโควตา)
+    const isBagFull = currentInv >= 5; // (เลข 5 คือโควตา)
 
-    let items = rewards.map(r => {
+    let items = generalItems.map(r => {
         // เช็คว่าเป็นกาชาหรือไม่ (เพื่อใส่ icon หรือลูกเล่นเฉยๆ)
         const isGacha = r.type === 'random_box' || r.type === 'gacha_custom' || (r.gacha_data && r.gacha_data.length > 0);
 
@@ -5254,9 +5345,21 @@ window.renderGuildsDashboard = (resetPage = true) => {
                     </div>
                 </td>
                 <td class="px-6 py-4 text-center text-gray-600">${g.memberCount}</td>
+                <td class="px-4 py-3 text-center font-mono font-bold text-amber-600">${(g.fund_points || 0).toLocaleString()}</td>
                 <td class="px-6 py-4 text-center font-bold text-gray-800 group-hover:text-indigo-600">${Math.floor(g.totalPoints).toLocaleString()}</td>
                 <td class="px-6 py-4 text-center">
-                    <button class="text-indigo-600 hover:bg-indigo-100 p-2 rounded-full">⚙️ จัดการ</button>
+                    <div class="flex items-center justify-center gap-2">
+                
+                        <button onclick="event.stopPropagation(); openGuildStore('${g.id}')" 
+                        class="p-2 text-amber-600 hover:bg-amber-100 rounded-full transition" 
+                        title="เข้าร้านค้ากิลด์">
+                        🏪
+                        </button>
+                        
+                        <button class="text-indigo-600 hover:bg-indigo-100 p-2 rounded-full">
+                        ⚙️ จัดการ
+                        </button>
+                    </div>
                 </td>
             </tr>
         `}).join('');
@@ -5364,7 +5467,7 @@ window.renderGuildMembersSelect = () => {
 
         // ⏳ คำนวณเวลาที่เหลือ (Cooldown Badge) [NEW]
         let cooldownBadge = '';
-        if (ruleCooldown > 0 && s.guild_id) {
+        if (ruleCooldown > 0 && s.guild_id === currentManageGuildId) {
              let joinedTime = 0;
              // แปลงเวลาให้ชัวร์
              if (s.guild_joined_at) {
@@ -5550,124 +5653,145 @@ window.showGuildPenaltyModal = (type, dataList, feePerPerson, totalFee) => {
 // ฟังก์ชันบันทึกกิลด์ (Strict Check 🛡️)
 // ==========================================
 // ==========================================
-// ฟังก์ชันบันทึกกิลด์ (ฉบับแก้ Path ผิดซอย 🛣️✅)
+// 💾 บันทึกข้อมูลกิลด์ + ย้ายสมาชิก + คิดดอกเบี้ย (Fixed Version)
+// ==========================================
+// ==========================================
+// 💾 บันทึกข้อมูลกิลด์ + ย้ายสมาชิก + ทบยอดธนาคาร (Fixed Undefined Error)
+// ==========================================
+// ==========================================
+// 💾 บันทึกข้อมูลกิลด์ (แก้ไขเรื่องแต้มไม่ทบ + สัญญาบัค)
 // ==========================================
 window.saveGuildData = async () => {
-    if(!currentManageGuildId) return;
+    if (!currentManageGuildId) return;
 
-    // รับค่า Config
+    // 1. รับค่า Config
     const newName = document.getElementById('edit-guild-name').value.trim();
     const newIcon = document.getElementById('edit-guild-icon').value.trim();
     const buffInterest = parseFloat(document.getElementById('guild-buff-interest').value) || 0;
     const buffDiscount = parseInt(document.getElementById('guild-buff-discount').value) || 0;
     const ruleCooldown = parseInt(document.getElementById('edit-guild-cooldown').value) || 0;
     const ruleFee = parseInt(document.getElementById('edit-guild-fee').value) || 0;
-    
-   
 
-    // เช็คโควตา
-    const maxLimit = (config && config.max_guild_members) ? parseInt(config.max_guild_members) : 0;
+    const maxLimit = (typeof config !== 'undefined' && config.max_guild_members) ? parseInt(config.max_guild_members) : 0;
     if (maxLimit > 0 && tempGuildSelection.size > maxLimit) {
-        alert(`❌ สมาชิกเกิน! รับได้สูงสุด ${maxLimit} คน`);
-        return;
+        return Swal.fire('สมาชิกเกิน', `กิลด์รับได้สูงสุด ${maxLimit} คน`, 'warning');
     }
 
     try {
+        showLoading(true);
+
         const currentMembers = students.filter(s => s.guild_id === currentManageGuildId);
         const newMemberIds = Array.from(tempGuildSelection);
-        
-        // หาคนเข้า/ย้ายมา และ คนออก
         const joiners = newMemberIds.map(id => students.find(s => s.id === id)).filter(s => s && !currentMembers.find(m => m.id === s.id));
         const leavers = currentMembers.filter(m => !newMemberIds.includes(m.id));
 
-        // --- ตรวจสัญญา ---
-        const lockedList = []; 
-        const penaltyList = []; 
+        // --- 🛡️ ส่วนตรวจสอบสัญญา (แก้ไข Logic) ---
+        const lockedList = [];
+        const penaltyList = [];
         let penaltyTotal = 0;
         const now = Date.now();
         const cooldownMs = ruleCooldown * 60 * 60 * 1000;
+        
+        const parseTime = (t) => {
+            if (!t) return 0;
+            if (typeof t.toMillis === 'function') return t.toMillis();
+            if (t instanceof Date) return t.getTime();
+            if (t.seconds) return t.seconds * 1000;
+            return new Date(t).getTime();
+        };
 
         const checkContract = (s) => {
-            if (ruleCooldown <= 0 || !s.guild_id) return; 
-            let joinedTime = 0;
-            if (s.guild_joined_at) {
-                if (typeof s.guild_joined_at.toMillis === 'function') joinedTime = s.guild_joined_at.toMillis();
-                else if (s.guild_joined_at instanceof Date) joinedTime = s.guild_joined_at.getTime();
-                else if (s.guild_joined_at.seconds) joinedTime = s.guild_joined_at.seconds * 1000;
-            }
+            if (ruleCooldown <= 0) return;
+            
+            // 🔥 FIX: เช็คเฉพาะคนที่ "อยู่กิลด์นี้" เท่านั้น (คนนอกที่กำลังจะเข้า ไม่เกี่ยว)
+            if (s.guild_id !== currentManageGuildId) return;
+
+            const joinedTime = parseTime(s.guild_joined_at);
             const timeDiff = now - joinedTime;
+            
             if (joinedTime > 0 && timeDiff < cooldownMs) {
+                // ดึงแต้มปัจจุบัน (รองรับทั้ง points และ bank_points แบบคร่าวๆ เพื่อเช็ค)
                 const currentPoints = s.points || 0;
+                
                 if (currentPoints < ruleFee) {
-                    lockedList.push({ name: s.full_name, missing: (ruleFee - currentPoints).toLocaleString(), hours: Math.ceil((cooldownMs - timeDiff)/3600000) });
+                    lockedList.push({ 
+                        name: s.full_name, 
+                        missing: (ruleFee - currentPoints).toLocaleString(), 
+                        hours: Math.ceil((cooldownMs - timeDiff) / 3600000) 
+                    });
                 } else {
-                    penaltyList.push({ name: s.full_name, id: s.id });
-                    penaltyTotal += ruleFee;
+                    penaltyList.push({ name: s.full_name, id: s.id }); 
+                    penaltyTotal += ruleFee; 
                 }
             }
         };
-
+        
+        // ตรวจเฉพาะคนที่จะ "ออก" (Leavers)
         leavers.forEach(s => checkContract(s));
-        joiners.forEach(s => { if (s.guild_id && s.guild_id !== currentManageGuildId) checkContract(s); });
 
-        // 🛑 ด่าน 1: ติดล็อก
-        if (lockedList.length > 0) {
-            await showGuildPenaltyModal('lock', lockedList);
-            return;
-        }
-
-        // ⚠️ ด่าน 2: ถามยืนยัน
+        if (lockedList.length > 0) { showLoading(false); await showGuildPenaltyModal('lock', lockedList); return; }
         if (penaltyList.length > 0) {
+            showLoading(false);
             const confirmed = await showGuildPenaltyModal('confirm', penaltyList, ruleFee, penaltyTotal);
             if (confirmed !== true) return;
+            showLoading(true);
         }
+        // ----------------------------------
 
-        // --- เริ่มบันทึก ---
-        const penaltyIds = penaltyList.map(p => p.id);
         const batch = writeBatch(db);
         const guildRef = doc(db, 'artifacts', appId, 'public', 'data', 'guilds', currentManageGuildId);
+        
+        batch.set(guildRef, {
+            name: newName, icon: newIcon, rule_cooldown: ruleCooldown, rule_fee: ruleFee,
+            buff_interest: buffInterest, buff_discount: buffDiscount
+        }, { merge: true });
 
-        batch.set(guildRef, { name: newName, icon: newIcon,rule_cooldown: ruleCooldown, rule_fee: ruleFee, buff_interest: buffInterest, buff_discount: buffDiscount }, { merge: true });
-
-        // 1. จัดการคนเข้า (Joiners)
+        // 🟢 1. จัดการคนเข้า (Joiners)
         joiners.forEach(s => {
-            // 🔴 แก้ Path ตรงนี้ครับ (ใส่ path ยาวๆ ให้ครบ)
             const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
-            const updates = { guild_id: currentManageGuildId, guild_joined_at: new Date() };
+            const updates = {
+                guild_id: currentManageGuildId,
+                guild_joined_at: new Date(),
             
-            if (penaltyIds.includes(s.id)) {
+            };
+
+            if (penaltyList.find(p => p.id === s.id)) {
                 updates.points = increment(-ruleFee);
                 const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
-                batch.set(hRef, { student_id: s.id, student_name: s.full_name, action: 'ฉีกสัญญา (ย้ายค่าย)', amount: ruleFee, type: 'remove_points', timestamp: serverTimestamp() });
+                batch.set(hRef, { student_id: s.id, student_name: s.full_name, action: 'ค่าปรับ (ย้ายเข้า)', amount: -ruleFee, type: 'penalty', timestamp: serverTimestamp() });
             }
             batch.set(sRef, updates, { merge: true });
         });
 
-        // 2. จัดการคนออก (Leavers)
+        // 🔴 2. จัดการคนออก (Leavers)
         leavers.forEach(s => {
-            // 🔴 แก้ Path ตรงนี้ด้วยครับ
             const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
-            const updates = { guild_id: null, guild_joined_at: null };
             
-            if (penaltyIds.includes(s.id)) {
-                updates.points = increment(-ruleFee); 
+            const updates = {
+                guild_id: null,
+                guild_joined_at: null,
+            };
+
+            if (penaltyList.find(p => p.id === s.id)) {
+                updates.points = increment(-ruleFee);
                 const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
-                batch.set(hRef, { student_id: s.id, student_name: s.full_name, action: 'ฉีกสัญญา (ลาออก)', amount: ruleFee, type: 'remove_points', timestamp: serverTimestamp() });
+                batch.set(hRef, { student_id: s.id, student_name: s.full_name, action: 'ค่าปรับ (ลาออก)', amount: -ruleFee, type: 'penalty', timestamp: serverTimestamp() });
             }
             batch.set(sRef, updates, { merge: true });
         });
 
         await batch.commit();
+        showLoading(false);
         document.getElementById('manage-guild-modal').classList.add('hidden');
-        showToast(`💾 บันทึกเรียบร้อย!`, 'success');
-        
-        // UI Refresh
-        if(typeof renderGuildsDashboard === 'function') renderGuildsDashboard();
-        if(typeof renderStudentList === 'function') renderStudentList(false);
-        
+        showToast(`💾 บันทึกและเคลียร์ยอดเรียบร้อย!`, 'success');
+
+        if (typeof renderGuildsDashboard === 'function') renderGuildsDashboard();
+        if (typeof renderStudentList === 'function') renderStudentList(false);
+
     } catch (err) {
+        showLoading(false);
         console.error(err);
-        alert('เกิดข้อผิดพลาด: ' + err.message);
+        Swal.fire('Error', err.message, 'error');
     }
 };
 // วางฟังก์ชันนี้ไว้ท้ายสุดของ Script 
@@ -6147,6 +6271,35 @@ if (rules.rank_rules) {
         totalBoost += (rankBuff.boost || 0);
     }
 }
+
+// =========================================================
+    // 🔥 PART 2: บัฟจากร้านค้ากิลด์ (Active Buffs) - เพิ่มใหม่ตรงนี้ ✅
+    // =========================================================
+    if (g.active_buffs) {
+        const now = Date.now();
+
+        // ฟังก์ชันย่อยสำหรับเช็ควันหมดอายุ
+        const getActiveVal = (buffObj) => {
+            // ถ้าค่าว่าง
+            if (!buffObj) return 0;
+            
+            // ถ้าเป็น Object (แบบใหม่ มีวันหมดอายุ)
+            if (typeof buffObj === 'object' && buffObj.end_time) {
+                if (buffObj.end_time > now) {
+                    return parseFloat(buffObj.value) || 0; // ยังไม่หมดอายุ -> คืนค่า
+                }
+                return 0; // หมดอายุแล้ว -> คืนค่า 0
+            }
+            
+            // รองรับเคสเก่า (ถ้ามี) ที่เป็นตัวเลขเพียวๆ
+            return parseFloat(buffObj) || 0;
+        };
+
+        // บวกค่าพลังจากร้านค้า เข้าไปในตัวแปรสะสม
+        totalInterest += getActiveVal(g.active_buffs.interest);
+        totalDiscount += getActiveVal(g.active_buffs.discount);
+        totalBoost    += getActiveVal(g.active_buffs.point_boost); // ตรงนี้แหละครับที่ทำให้ 150% ทำงาน
+    }
 // ------------------------------------------
 
 // 🔥🔥🔥 จุดที่แก้: กฎเด็กดี (Good Guild) - เปลี่ยนเป็นเช็คใบเตือน 🔥🔥🔥
@@ -10217,5 +10370,594 @@ window.deleteInventoryItem = async (studentId, itemIndex, itemName) => {
         console.error(e);
         showLoading(false);
         Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + e.message, 'error');
+    }
+};
+
+// ==========================================
+// 🤝 ระบบบริจาคกองทุนกิลด์ (Guild Fund)
+// ==========================================
+
+let currentStudentForDonate = null;
+
+// 1. เปิด Modal บริจาค
+window.openDonateGuildModal = (studentId) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    // เช็คว่ามีกิลด์ไหม?
+    if (!student.guild_id) {
+        return Swal.fire('ไม่พบกิลด์', 'นักเรียนคนนี้ยังไม่มีสังกัดกิลด์ครับ', 'warning');
+    }
+
+    const guild = guilds.find(g => g.id === student.guild_id);
+    const guildName = guild ? guild.name : 'ไม่ทราบชื่อกิลด์';
+
+    currentStudentForDonate = student;
+
+    // Set ค่าใน Modal
+    document.getElementById('donate-guild-subtitle').innerHTML = `บริจาคในนาม: <b>${student.full_name}</b><br>เข้าสู่กิลด์: <span class="text-amber-600">${guildName}</span>`;
+    document.getElementById('donate-student-points').innerText = Math.floor(student.points || 0).toLocaleString();
+    document.getElementById('guild-donate-amount').value = '';
+
+    document.getElementById('modal-donate-guild').classList.remove('hidden');
+    document.getElementById('modal-donate-guild').classList.add('flex');
+    
+    // Auto Focus ช่องกรอก
+    setTimeout(() => document.getElementById('guild-donate-amount').focus(), 100);
+};
+
+// 2. ยืนยันการบริจาค
+window.confirmDonateGuild = async () => {
+    if (!currentStudentForDonate) return;
+
+    const amount = parseInt(document.getElementById('guild-donate-amount').value);
+    
+    // Validation
+    if (isNaN(amount) || amount <= 0) {
+        return Swal.fire('แจ้งเตือน', 'กรุณาระบุจำนวนแต้มให้ถูกต้อง', 'warning');
+    }
+    if (amount > currentStudentForDonate.points) {
+        return Swal.fire('แต้มไม่พอ', 'นักเรียนมีแต้มไม่เพียงพอสำหรับการบริจาค', 'error');
+    }
+
+    try {
+        showLoading(true);
+        const batch = writeBatch(db);
+        
+        // 1. หักเงินนักเรียน
+        const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentForDonate.id);
+        batch.update(sRef, { points: increment(-amount) });
+
+        // 2. เพิ่มเงินเข้ากองทุนกิลด์
+        const gRef = doc(db, 'artifacts', appId, 'public', 'data', 'guilds', currentStudentForDonate.guild_id);
+        batch.update(gRef, { fund_points: increment(amount) });
+
+        // 3. บันทึกประวัติ
+        const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
+        batch.set(hRef, {
+            student_id: currentStudentForDonate.id,
+            student_name: currentStudentForDonate.full_name,
+            action: 'บริจาคกิลด์',
+            amount: -amount,
+            type: 'guild_donate',
+            timestamp: serverTimestamp()
+        });
+
+        await batch.commit();
+        showLoading(false);
+
+        // ปิด Modal และแจ้งเตือน
+        document.getElementById('modal-donate-guild').classList.add('hidden');
+        document.getElementById('modal-donate-guild').classList.remove('flex');
+        
+        Swal.fire({
+            icon: 'success',
+            title: 'บริจาคสำเร็จ! 🤝',
+            html: `บริจาค <b>${amount.toLocaleString()}</b> แต้ม<br>เข้าสู่กองทุนกิลด์เรียบร้อยแล้ว`,
+            timer: 2000,
+            showConfirmButton: false
+        });
+
+    } catch (e) {
+        console.error(e);
+        showLoading(false);
+        Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + e.message, 'error');
+    }
+};
+
+// ==========================================
+// 🏰 GUILD SHOP & INVENTORY SYSTEM (Updated)
+// ==========================================
+
+let currentGuildForShop = null;
+
+// --- 1. ADMIN: จัดการสินค้า (คงเดิม) ---
+window.openGuildShopManager = () => {
+    renderGuildShopAdminList();
+    document.getElementById('modal-guild-shop-manager').classList.remove('hidden');
+    document.getElementById('modal-guild-shop-manager').classList.add('flex');
+};
+// ... (ฟังก์ชัน renderGuildShopAdminList, saveGuildShopItem ใช้ของเดิมได้เลยครับ ไม่ต้องแก้) ...
+// ==========================================
+// 🛠️ ฟังก์ชันแสดงรายการสินค้ากิลด์ (ฝั่ง Admin)
+// ==========================================
+window.renderGuildShopAdminList = () => {
+    // 1. หา Element ปลายทาง
+    const container = document.getElementById('guild-shop-admin-list');
+    if (!container) return;
+
+    // 2. กรองเฉพาะสินค้าที่เป็น "ร้านค้ากิลด์" (shop_type === 'guild')
+    // (ตัวแปร rewards คือตัวแปร Global ที่เก็บสินค้าทั้งหมดในระบบ)
+    const guildItems = rewards.filter(r => r.shop_type === 'guild');
+    
+    // 3. กรณีไม่มีสินค้า
+    if (guildItems.length === 0) {
+        container.innerHTML = '<div class="col-span-full text-center text-gray-400 py-10 flex flex-col items-center"><span class="text-4xl mb-2">🍃</span><span>ยังไม่มีสินค้าในร้านกิลด์</span></div>';
+        return;
+    }
+
+    // 4. วาด HTML รายการสินค้า
+    container.innerHTML = guildItems.map(item => {
+        // จัดรูปแบบการแสดงผล (ถ้าเป็นบัฟ โชว์ค่าพลัง / ถ้าเป็นไอเทม โชว์คำว่าไอเทม)
+        let detailText = '';
+        if (item.type === 'guild_item') {
+            detailText = '📦 ไอเทมทั่วไป';
+        } else {
+            const unit = item.type.includes('interest') ? '%' : '%'; // หน่วย (ดอกเบี้ย หรือ บูสต์)
+            const durationHrs = item.duration ? (item.duration / 3600000).toFixed(1) : 0;
+            detailText = `⚡ บัฟ: +${item.value}${unit} (${durationHrs} ชม.)`;
+        }
+
+        return `
+        <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex gap-3 relative group hover:border-amber-300 transition-all">
+            <div class="w-14 h-14 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center border">
+                ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover">` : `<span class="text-2xl">🏰</span>`}
+            </div>
+
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-800 text-sm truncate pr-6">${item.name}</div>
+                <div class="text-xs text-amber-600 font-bold mt-0.5">💰 ${item.points.toLocaleString()} กองทุน</div>
+                <div class="text-[10px] text-gray-400 mt-1 bg-gray-50 inline-block px-1.5 rounded">
+                    ${detailText}
+                </div>
+            </div>
+
+            <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-sm rounded-md p-1 border">
+                <button onclick="editGuildShopItem('${item.id}')" class="text-blue-500 hover:bg-blue-50 p-1 rounded transition" title="แก้ไข">
+                    ✏️
+                </button>
+                <button onclick="deleteReward('${item.id}')" class="text-red-500 hover:bg-red-50 p-1 rounded transition" title="ลบ">
+                    🗑️
+                </button>
+            </div>
+        </div>
+        `;
+    }).join('');
+};
+
+window.toggleGuildShopInputs = () => {
+    const type = document.getElementById('gs-type').value;
+    const config = document.getElementById('gs-buff-config');
+    if (type === 'guild_item') config.classList.add('hidden');
+    else config.classList.remove('hidden');
+};
+
+window.saveGuildShopItem = async () => {
+    const id = document.getElementById('gs-edit-id').value;
+    const name = document.getElementById('gs-name').value;
+    const price = parseInt(document.getElementById('gs-price').value) || 0;
+    const stock = parseInt(document.getElementById('gs-stock').value) || -1;
+    const type = document.getElementById('gs-type').value;
+    const image = document.getElementById('gs-image').value;
+
+    // คำนวณเวลาและค่าพลัง
+    const val = parseFloat(document.getElementById('gs-value').value) || 0;
+    const durationNum = parseInt(document.getElementById('gs-duration').value) || 0;
+    const unit = document.getElementById('gs-unit').value;
+    
+    let durationMS = 0;
+    if (durationNum > 0) {
+        durationMS = durationNum * (unit === 'hour' ? 3600000 : 86400000);
+    }
+
+    if (!name || price < 0) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาระบุชื่อและราคา', 'error');
+
+    const data = {
+        name,
+        points: price, // ใช้ field points แต่ในบริบทนี้คือ fund_points
+        stock,
+        type,
+        image,
+        value: val,
+        duration: durationMS,
+        shop_type: 'guild', // 🚩 Flag สำคัญเพื่อแยกจากร้านปกติ
+        updated_at: serverTimestamp()
+    };
+
+    showLoading(true);
+    try {
+        if (id) {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rewards', id), data);
+        } else {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'rewards'), {
+                ...data,
+                created_at: serverTimestamp()
+            });
+        }
+        resetGuildShopForm();
+        renderGuildShopAdminList(); // Refresh list immediately
+        showToast('บันทึกสินค้ากิลด์แล้ว');
+
+        setTimeout(() => {
+            if(typeof renderGuildShopAdminList === 'function') {
+                renderGuildShopAdminList();
+            }
+        }, 500);
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', e.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+};
+
+window.editGuildShopItem = (id) => {
+    const item = rewards.find(r => r.id === id);
+    if (!item) return;
+    
+    document.getElementById('gs-edit-id').value = item.id;
+    document.getElementById('gs-name').value = item.name;
+    document.getElementById('gs-price').value = item.points;
+    document.getElementById('gs-stock').value = item.stock;
+    document.getElementById('gs-type').value = item.type;
+    document.getElementById('gs-image').value = item.image || '';
+    document.getElementById('gs-value').value = item.value || 0;
+    
+    // แปลงเวลาคืนเป็นหน่วยที่ใกล้เคียง
+    if (item.duration >= 86400000) {
+        document.getElementById('gs-duration').value = item.duration / 86400000;
+        document.getElementById('gs-unit').value = 'day';
+    } else {
+        document.getElementById('gs-duration').value = (item.duration / 3600000) || 1;
+        document.getElementById('gs-unit').value = 'hour';
+    }
+    toggleGuildShopInputs();
+};
+
+window.resetGuildShopForm = () => {
+    document.getElementById('gs-edit-id').value = '';
+    document.getElementById('gs-name').value = '';
+    document.getElementById('gs-price').value = '';
+    document.getElementById('gs-stock').value = '-1';
+    document.getElementById('gs-image').value = '';
+};
+
+// --- 2. USER: หน้าร้านค้า ---
+
+window.openGuildStore = (guildId) => {
+    // 1. หาข้อมูลกิลด์
+    currentGuildForShop = guilds.find(g => g.id === guildId);
+    if (!currentGuildForShop) return;
+
+    // 2. อัปเดต Header
+    document.getElementById('store-guild-name').innerText = currentGuildForShop.name;
+    document.getElementById('store-guild-fund').innerText = (currentGuildForShop.fund_points || 0).toLocaleString();
+
+    // 3. เริ่มต้นที่แท็บร้านค้าเสมอ
+    switchGuildStoreTab('shop');
+    
+    // 4. เปิด Modal
+    document.getElementById('modal-guild-store').classList.remove('hidden');
+    document.getElementById('modal-guild-store').classList.add('flex');
+};
+
+// ฟังก์ชันสลับแท็บ
+window.switchGuildStoreTab = (tab) => {
+    const btnShop = document.getElementById('tab-guild-shop');
+    const btnInv = document.getElementById('tab-guild-inv');
+    const divShop = document.getElementById('guild-store-grid');
+    const divInv = document.getElementById('guild-inventory-grid');
+    const divEmpty = document.getElementById('guild-inventory-empty');
+
+    if (tab === 'shop') {
+        // Active Shop
+        btnShop.className = "flex-1 py-3 text-sm font-bold text-amber-600 border-b-2 border-amber-600 bg-amber-50 transition-colors";
+        btnInv.className = "flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors";
+        divShop.classList.remove('hidden');
+        divInv.classList.add('hidden');
+        divEmpty.classList.add('hidden');
+        renderGuildStoreItems(); // วาดรายการสินค้า
+    } else {
+        // Active Inventory
+        btnInv.className = "flex-1 py-3 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50 transition-colors";
+        btnShop.className = "flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors";
+        divShop.classList.add('hidden');
+        divInv.classList.remove('hidden');
+        renderGuildInventoryItems(); // วาดของในกระเป๋า
+    }
+};
+
+// แสดงรายการสินค้าขาย
+window.renderGuildStoreItems = () => {
+    const container = document.getElementById('guild-store-grid');
+    const shopItems = rewards.filter(r => r.shop_type === 'guild');
+
+    container.innerHTML = shopItems.map(item => {
+        const canAfford = (currentGuildForShop.fund_points || 0) >= item.points;
+        const hasStock = item.stock === -1 || item.stock > 0;
+        const disabled = !canAfford || !hasStock;
+        
+        return `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col justify-between hover:shadow-lg transition">
+            <div class="h-32 bg-gray-50 rounded-lg mb-3 overflow-hidden flex items-center justify-center relative">
+                ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover">` : `<span class="text-4xl">📦</span>`}
+                ${!hasStock ? '<div class="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold">สินค้าหมด</div>' : ''}
+            </div>
+            <div>
+                <h4 class="font-bold text-gray-800 line-clamp-1">${item.name}</h4>
+                <div class="flex justify-between items-center mt-1">
+                    <span class="text-amber-600 font-bold">💰 ${item.points.toLocaleString()}</span>
+                    <span class="text-xs text-gray-400">คลัง: ${item.stock === -1 ? '∞' : item.stock}</span>
+                </div>
+            </div>
+            <button onclick="buyGuildItem('${item.id}')" ${disabled ? 'disabled' : ''} 
+                class="w-full mt-3 py-2 rounded-lg font-bold text-sm text-white transition-all transform active:scale-95 
+                ${disabled ? 'bg-gray-300 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/30 shadow-lg'}">
+                ${!canAfford ? 'กองทุนไม่พอ' : (!hasStock ? 'หมด' : 'ซื้อเก็บไว้')}
+            </button>
+        </div>`;
+    }).join('') || '<div class="col-span-full text-center text-gray-400 py-10">ร้านค้าปิดปรับปรุง</div>';
+};
+
+// แสดงของในกระเป๋า
+window.renderGuildInventoryItems = () => {
+    const container = document.getElementById('guild-inventory-grid');
+    const emptyState = document.getElementById('guild-inventory-empty');
+    
+    // ดึงข้อมูลกิลด์ล่าสุด (เผื่อมีของใหม่)
+    const g = guilds.find(x => x.id === currentGuildForShop.id);
+    const inventory = g.inventory || []; // รายการของที่ซื้อไว้
+    
+    // อัปเดต Badge จำนวนของ
+    const badge = document.getElementById('guild-inv-badge');
+    if(inventory.length > 0) {
+        badge.innerText = inventory.length;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+
+    if (inventory.length === 0) {
+        container.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    container.innerHTML = inventory.map(item => {
+        // เช็คประเภทเพื่อเลือกไอคอน
+        const isBuff = item.type && item.type.includes('buff');
+        const icon = isBuff ? (item.type.includes('interest') ? '📈' : '🚀') : '📦';
+        const date = item.obtained_at ? new Date(item.obtained_at.seconds * 1000).toLocaleDateString('th-TH') : '-';
+
+        return `
+        <div class="bg-white rounded-xl shadow-sm border border-indigo-100 p-4 flex gap-4 items-center hover:shadow-md transition relative overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 w-1 ${isBuff ? 'bg-indigo-500' : 'bg-gray-400'}"></div>
+            
+            <div class="w-14 h-14 bg-indigo-50 rounded-lg flex items-center justify-center text-2xl flex-shrink-0">
+                ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover rounded-lg">` : icon}
+            </div>
+            
+            <div class="flex-1">
+                <h4 class="font-bold text-gray-800 text-sm line-clamp-1">${item.name}</h4>
+                <div class="text-xs text-gray-500 mt-0.5">ได้เมื่อ: ${date}</div>
+                ${isBuff ? `<div class="text-[10px] text-indigo-600 font-bold bg-indigo-50 inline-block px-1.5 rounded mt-1">พลัง: +${item.value}${item.type.includes('interest')?'%':'%'}</div>` : ''}
+            </div>
+
+            <button onclick="useGuildItem('${item.id}')" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-indigo-500/30 shadow-md transition transform hover:scale-105 active:scale-95">
+                ใช้ทันที
+            </button>
+        </div>`;
+    }).join('');
+};
+
+
+// --- 3. ACTIONS: ซื้อ และ ใช้ ---
+
+// A. ฟังก์ชันซื้อ (เปลี่ยนจาก Active เลย -> เป็นเก็บลงกระเป๋า)
+window.buyGuildItem = async (itemId) => {
+    if (!currentGuildForShop) return;
+    const item = rewards.find(r => r.id === itemId);
+    if (!item) return;
+
+    if ((currentGuildForShop.fund_points || 0) < item.points) {
+        return Swal.fire('แจ้งเตือน', 'กองทุนกิลด์ไม่พอครับ', 'warning');
+    }
+
+    const confirm = await Swal.fire({
+        title: 'ยืนยันการซื้อ',
+        html: `ซื้อ <b>"${item.name}"</b> เก็บเข้ากระเป๋ากิลด์?<br>ราคา: <span class="text-amber-600 font-bold">${item.points.toLocaleString()}</span> แต้ม`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'ซื้อเก็บไว้',
+        confirmButtonColor: '#f59e0b'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    showLoading(true);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gRef = doc(db, 'artifacts', appId, 'public', 'data', 'guilds', currentGuildForShop.id);
+            const rRef = doc(db, 'artifacts', appId, 'public', 'data', 'rewards', item.id);
+            
+            const gDoc = await transaction.get(gRef);
+            const rDoc = await transaction.get(rRef);
+            if (!gDoc.exists() || !rDoc.exists()) throw "Data missing";
+
+            const gData = gDoc.data();
+            const rData = rDoc.data();
+
+            if (gData.fund_points < rData.points) throw "เงินไม่พอ";
+            if (rData.stock !== -1 && rData.stock <= 0) throw "สินค้าหมด";
+
+            // 1. หักเงินกองทุน
+            transaction.update(gRef, { fund_points: increment(-rData.points) });
+
+            // 2. ตัดสต็อก
+            if (rData.stock !== -1) {
+                transaction.update(rRef, { stock: increment(-1) });
+            }
+
+            // 3. สร้าง Item Object (เหมือนคูปอง)
+            const newItem = {
+                id: crypto.randomUUID(), // ID ของคูปองใบนี้
+                reward_id: item.id,
+                name: item.name,
+                type: item.type,       // guild_buff_interest, etc.
+                value: item.value || 0,
+                duration: item.duration || 0,
+                image: item.image || '',
+                obtained_at: new Date()
+            };
+
+            // 4. ยัดเข้ากระเป๋ากิลด์ (Inventory)
+            transaction.update(gRef, { 
+                inventory: arrayUnion(newItem) 
+            });
+
+            // 5. บันทึกประวัติ
+            const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+            transaction.set(hRef, {
+                guild_id: currentGuildForShop.id,
+                guild_name: gData.name,
+                action: `กิลด์ซื้อ: ${item.name}`,
+                amount: -rData.points,
+                type: 'guild_purchase',
+                timestamp: serverTimestamp()
+            });
+        });
+
+        showLoading(false);
+        Swal.fire({
+            icon: 'success',
+            title: 'ซื้อสำเร็จ!',
+            html: 'ของอยู่ใน <b>กระเป๋ากิลด์</b> แล้ว<br>กดใช้เมื่อต้องการบัฟ',
+            timer: 2000,
+            showConfirmButton: false
+        });
+
+        // อัปเดต UI ทันที (ไม่ต้องปิด Modal)
+        const updatedGuild = guilds.find(g => g.id === currentGuildForShop.id);
+        if(updatedGuild) {
+            document.getElementById('store-guild-fund').innerText = (updatedGuild.fund_points || 0).toLocaleString();
+            renderGuildStoreItems();
+            
+            // แจ้งเตือน Badge ที่แท็บกระเป๋า
+            const invCount = (updatedGuild.inventory || []).length;
+            const badge = document.getElementById('guild-inv-badge');
+            if(invCount > 0) { badge.innerText = invCount; badge.classList.remove('hidden'); }
+        }
+       
+
+    } catch (e) {
+        console.error(e);
+        showLoading(false);
+        Swal.fire('Error', e.message, 'error');
+    }
+};
+
+
+// B. ฟังก์ชันใช้ไอเทม (กดจากกระเป๋ากิลด์ -> บัฟทำงาน)
+window.useGuildItem = async (itemUuid) => {
+    if (!currentGuildForShop) return;
+    
+    // หาไอเทมในกระเป๋า (Client-side check)
+    const g = guilds.find(x => x.id === currentGuildForShop.id);
+    const item = (g.inventory || []).find(i => i.id === itemUuid);
+    if (!item) return;
+
+    const confirm = await Swal.fire({
+        title: 'เปิดใช้งานบัฟ?',
+        html: `ต้องการใช้ <b>"${item.name}"</b> ตอนนี้เลยหรือไม่?<br><span class="text-sm text-gray-500">ผลบัฟจะบวกทบกับบัฟเดิมที่มีอยู่</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '🚀 ใช้เลย',
+        confirmButtonColor: '#4f46e5'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    showLoading(true);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gRef = doc(db, 'artifacts', appId, 'public', 'data', 'guilds', currentGuildForShop.id);
+            const gDoc = await transaction.get(gRef);
+            if (!gDoc.exists()) throw "Guild not found";
+            
+            const gData = gDoc.data();
+            const currentInv = gData.inventory || [];
+            
+            // เช็คว่าไอเทมยังมีอยู่ไหม (กันคนกดพร้อมกัน)
+            const itemInDb = currentInv.find(i => i.id === itemUuid);
+            if (!itemInDb) throw "ไอเทมถูกใช้ไปแล้ว";
+
+            // --- Logic คำนวณ Stack Buff ---
+            if (item.type.includes('buff')) {
+                const now = Date.now();
+                let buffKey = (item.type === 'guild_buff_interest') ? 'interest' : 'point_boost';
+                let currentBuffs = gData.active_buffs || {};
+                
+                let currentVal = 0;
+                // ถ้าบัฟเก่ายังไม่หมดอายุ ให้เอาค่ามาบวก
+                if (currentBuffs[buffKey] && currentBuffs[buffKey].end_time > now) {
+                    currentVal = parseFloat(currentBuffs[buffKey].value) || 0;
+                }
+                
+                const newVal = currentVal + (parseFloat(item.value) || 0);
+                const newDuration = parseInt(item.duration) || 86400000;
+                
+                // อัปเดต Active Buffs
+                const updatedBuffs = {
+                    ...currentBuffs,
+                    [buffKey]: {
+                        value: newVal,
+                        end_time: now + newDuration, // ต่อเวลาใหม่
+                        last_updated: now
+                    }
+                };
+                transaction.update(gRef, { active_buffs: updatedBuffs });
+            }
+
+            // --- ลบออกจากกระเป๋า ---
+            const newInv = currentInv.filter(i => i.id !== itemUuid);
+            transaction.update(gRef, { inventory: newInv });
+
+            // บันทึกประวัติการใช้
+            const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+            transaction.set(hRef, {
+                guild_id: currentGuildForShop.id,
+                guild_name: gData.name,
+                action: `กิลด์ใช้บัฟ: ${item.name}`,
+                amount: 0,
+                type: 'guild_use_item',
+                timestamp: serverTimestamp()
+            });
+        });
+
+        showLoading(false);
+        Swal.fire('สำเร็จ', 'บัฟกิลด์ทำงานแล้ว! 🚀', 'success');
+
+        if (typeof renderGuildInventoryItems === 'function') renderGuildInventoryItems(); // รีเฟรชกระเป๋า (ไอเทมต้องหายไป)
+        if (typeof updateGuildStoreUI === 'function') updateGuildStoreUI(); // รีเฟรช UI (เผื่อมีแสดงสถานะบัฟ)
+        
+        // รีเฟรชหน้ากระเป๋า
+        switchGuildStoreTab('inventory');
+
+    } catch (e) {
+        console.error(e);
+        showLoading(false);
+        Swal.fire('Error', e.message, 'error');
     }
 };
