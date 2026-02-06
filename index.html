@@ -46,7 +46,7 @@
         <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
            <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full"><path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" /></svg>
         </div>
-        <h1 class="text-3xl font-bold mb-4">StdPoint V6.30</h1>
+        <h1 class="text-3xl font-bold mb-4">StdPoint V6.32</h1>
         <p class="text-lg opacity-90 mb-8">ระบบสะสมแต้มและจัดการพฤติกรรมนักเรียน</p>
         <div class="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm mb-4 text-4xl">
           👹
@@ -116,7 +116,7 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
         </div>
         <div>
-            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.30</h1>
+            <h1 id="system-title" class="text-xl font-bold text-gray-800">StdPoint V6.32</h1>
             <p id="user-role-display" class="text-xs text-gray-500">สถานะ: แขก</p>
         </div>
      </div>
@@ -954,6 +954,9 @@
             <button onclick="calculateAndApplyAutoBuffs()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold shadow-md text-sm">
                 🔄 รีเฟรชบัฟ
             </button>
+            <button onclick="openGuildShopManager()" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg shadow font-bold flex items-center gap-2 transition hover:scale-105">
+                🏪 จัดการร้านค้ากิลด์
+            </button>
             <button onclick="showCreateGuildModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg transition-transform active:scale-95 flex items-center gap-2">
                 <span>🛡️</span> สร้างกิลด์ใหม่
             </button>
@@ -980,6 +983,7 @@
                         <th class="px-6 py-4 text-center w-16">อันดับ</th>
                         <th class="px-6 py-4 text-left">ชื่อกิลด์</th>
                         <th class="px-6 py-4 text-center">สมาชิก</th>
+                        <th class="px-4 py-2 text-center text-amber-600">กองทุนสะสม</th>
                         <th class="px-6 py-4 text-center">แต้มรวม</th>
                         <th class="px-6 py-4 text-center">จัดการ</th>
                     </tr>
@@ -2543,6 +2547,160 @@
 
         <div class="p-4 border-t bg-white text-right">
             <button onclick="closeAdminInventory()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-5 py-2 rounded-lg font-bold">ปิดหน้าต่าง</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-donate-guild" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6">
+        <div class="text-center mb-4">
+            <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-2 shadow-inner">
+                🤝
+            </div>
+            <h3 class="text-xl font-bold text-gray-800">บริจาคเข้ากิลด์</h3>
+            <p class="text-sm text-gray-500" id="donate-guild-subtitle">...</p>
+        </div>
+
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4 text-center">
+            <span class="text-xs text-gray-500">แต้มของนักเรียน</span>
+            <div class="font-bold text-indigo-600 text-lg" id="donate-student-points">0</div>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-bold text-gray-700 mb-1">ระบุยอดบริจาค</label>
+            <input type="number" id="guild-donate-amount" class="w-full text-center text-2xl font-bold border-2 border-amber-200 rounded-xl p-3 focus:outline-none focus:border-amber-500 text-gray-700" placeholder="0">
+        </div>
+
+        <div class="flex gap-2">
+            <button onclick="document.getElementById('modal-donate-guild').classList.add('hidden')" class="flex-1 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-gray-600">ยกเลิก</button>
+            <button onclick="confirmDonateGuild()" class="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold shadow-lg shadow-amber-500/30">ยืนยันบริจาค</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-guild-shop-manager" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
+        <div class="p-4 bg-amber-600 text-white flex justify-between items-center shadow-md z-10">
+            <h3 class="font-bold text-lg flex items-center gap-2">🏪 จัดการสินค้า: ร้านค้ากิลด์</h3>
+            <button onclick="document.getElementById('modal-guild-shop-manager').classList.add('hidden')" class="text-white hover:text-gray-200 text-2xl">&times;</button>
+        </div>
+        
+        <div class="flex-1 overflow-hidden flex flex-col md:flex-row">
+            <div class="w-full md:w-1/3 p-4 border-r bg-gray-50 overflow-y-auto">
+                <h4 class="font-bold text-gray-700 mb-4 border-b pb-2">➕ เพิ่ม/แก้ไข สินค้า</h4>
+                <input type="hidden" id="gs-edit-id">
+                
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500">ชื่อสินค้า</label>
+                        <input type="text" id="gs-name" class="w-full border rounded p-2" placeholder="เช่น บัฟคูณแต้มกิลด์">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-xs font-bold text-gray-500">ราคา (กองทุน)</label>
+                            <input type="number" id="gs-price" class="w-full border rounded p-2" placeholder="0">
+                        </div>
+                        <div>
+                             <label class="text-xs font-bold text-gray-500">สินค้าคงคลัง</label>
+                             <input type="number" id="gs-stock" class="w-full border rounded p-2" placeholder="-1 = ไม่อั้น" value="-1">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-gray-500">ประเภท</label>
+                        <select id="gs-type" class="w-full border rounded p-2 bg-white" onchange="toggleGuildShopInputs()">
+                            <option value="guild_buff_interest">📈 บัฟ: เพิ่มดอกเบี้ยทบต้น</option>
+                            <option value="guild_buff_boost">🚀 บัฟ: บูสต์แต้ม (Multiplier)</option>
+                            <option value="guild_item">📦 ไอเทมทั่วไป (เข้ากระเป๋ากิลด์)</option>
+                        </select>
+                    </div>
+
+                    <div id="gs-buff-config" class="p-3 bg-amber-100 rounded border border-amber-200 space-y-2">
+                        <div>
+                            <label class="text-xs font-bold text-amber-800">ค่าพลัง (Value)</label>
+                            <input type="number" step="0.1" id="gs-value" class="w-full border border-amber-300 rounded p-1" placeholder="เช่น 0.5 หรือ 50">
+                            <p class="text-[10px] text-amber-700 mt-1">*ดอกเบี้ยใส่ทศนิยมได้ (0.5), บูสต์ใส่เป็น % (50)</p>
+                        </div>
+                        <div class="flex gap-1">
+                            <div class="flex-1">
+                                <label class="text-xs font-bold text-amber-800">เวลา</label>
+                                <input type="number" id="gs-duration" class="w-full border border-amber-300 rounded p-1" value="1">
+                            </div>
+                            <div class="flex-1">
+                                <label class="text-xs font-bold text-amber-800">หน่วย</label>
+                                <select id="gs-unit" class="w-full border border-amber-300 rounded p-1 bg-white">
+                                    <option value="hour">ชั่วโมง</option>
+                                    <option value="day" selected>วัน</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-gray-500">URL รูปภาพ</label>
+                        <input type="text" id="gs-image" class="w-full border rounded p-2" placeholder="https://...">
+                    </div>
+
+                    <div class="flex gap-2 pt-2">
+                        <button onclick="resetGuildShopForm()" class="flex-1 py-2 bg-gray-200 rounded text-gray-600 text-sm font-bold">ล้างค่า</button>
+                        <button onclick="saveGuildShopItem()" class="flex-1 py-2 bg-amber-600 text-white rounded shadow text-sm font-bold hover:bg-amber-700">บันทึก</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full md:w-2/3 p-4 bg-gray-100 overflow-y-auto">
+                <h4 class="font-bold text-gray-700 mb-4">📦 รายการสินค้าปัจจุบัน</h4>
+                <div id="guild-shop-admin-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-guild-store" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+        
+        <div class="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-10">
+            <div class="flex items-center gap-4">
+                <div class="bg-amber-500 p-2 rounded-lg">
+                    <span class="text-2xl">🏰</span>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold" id="store-guild-name">Guild Name</h2>
+                    <div class="flex items-center gap-2 text-sm text-amber-400">
+                        <span>กองทุนสะสม:</span>
+                        <span class="font-bold text-lg" id="store-guild-fund">0</span>
+                        <span>แต้ม</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="document.getElementById('modal-guild-store').classList.add('hidden')" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+        </div>
+
+        <div class="flex border-b border-gray-200 bg-white">
+            <button onclick="switchGuildStoreTab('shop')" id="tab-guild-shop" class="flex-1 py-3 text-sm font-bold text-amber-600 border-b-2 border-amber-600 bg-amber-50 transition-colors">
+                🛒 ร้านค้า (ซื้อของ)
+            </button>
+            <button onclick="switchGuildStoreTab('inventory')" id="tab-guild-inv" class="flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors">
+                🎒 กระเป๋ากิลด์ (กดใช้บัฟ) <span id="guild-inv-badge" class="ml-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full hidden">0</span>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto bg-gray-100 p-6 relative">
+            
+            <div id="guild-store-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 fade-in">
+                </div>
+
+            <div id="guild-inventory-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in">
+                </div>
+            
+            <div id="guild-inventory-empty" class="hidden flex flex-col items-center justify-center h-full text-gray-400 pb-10">
+                <span class="text-6xl mb-4">🕸️</span>
+                <p>กระเป๋ากิลด์ว่างเปล่า</p>
+                <button onclick="switchGuildStoreTab('shop')" class="mt-4 text-amber-600 underline text-sm">ไปซื้อของกันเถอะ</button>
+            </div>
+
         </div>
     </div>
 </div>
