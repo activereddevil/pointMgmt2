@@ -808,7 +808,6 @@ function setupNavigation() {
             <button onclick="switchTab('history')" id="tab-history" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ประวัติ</button>
             <button onclick="switchTab('rewards')" id="tab-rewards" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">รางวัล</button>
             
-            <button onclick="switchTab('report')" id="tab-report" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">รายงานผล</button>
             <button onclick="switchTab('settings')" id="tab-settings" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ตั้งค่า</button>
         `;
         document.getElementById('teacher-reward-controls').classList.remove('hidden');
@@ -1093,7 +1092,7 @@ function formatFirestoreTimestamp(timestamp) {
 
 // --- RENDER FUNCTIONS ---
 
-// Pagination Helper
+/* Pagination Helper
 function getPaginatedData(data, page) {
     const start = (page - 1) * itemsPerPage;
     const end = start + itemsPerPage;
@@ -1147,7 +1146,7 @@ window.changeItemsPerPage = (type, val) => {
     if (type === 'bank') renderBankList(true);
     if (type === 'history') renderHistory(true);
     if (type === 'guilds') renderGuildsDashboard(true);
-};
+};*/
 
 window.switchTab = (tabName) => {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -1245,16 +1244,20 @@ function getRemainingTimeText(endTime) {
     return `${minutes} นาที`;
 }
 
-// ✅ ฟังก์ชันแสดงรายชื่อนักเรียน (ฉบับ Super Dashboard)
-// ✅ ฟังก์ชันแสดงรายชื่อนักเรียน (อัปเดต: เพิ่มแท็กเวลาบัฟ 🕒)
-// ✅ ฟังก์ชันแสดงรายชื่อนักเรียน (อัปเกรด: แสดงยอดบัฟแบบทบกัน ➕)
+// ==========================================
+// 👨‍🎓 Render รายชื่อนักเรียน (Pagination ใหม่)
+// ==========================================
 window.renderStudentList = (resetPage = true) => {
     allStudents = students;
-    if (resetPage) paginationState.home = 1;
+    
+    // 🔥 แก้ไข 1: ใช้ Global Pagination State
+    if (!window.paginationState) window.paginationState = { student: 1 };
+    if (resetPage) window.paginationState.student = 1;
+
     const tbody = document.getElementById('student-list');
     const filter = document.getElementById('search-input').value.toLowerCase();
-   
     
+    // กรองข้อมูล (Logic เดิม)
     let filtered = students.filter(s => {
         const gName = s.guild_id ? (guilds.find(g => g.id === s.guild_id)?.name || '') : '';
         return s.full_name.toLowerCase().includes(filter) || 
@@ -1268,7 +1271,26 @@ window.renderStudentList = (resetPage = true) => {
     }
     
     document.getElementById('student-count') && (document.getElementById('student-count').textContent = filtered.length);
-    const { data: paginatedData } = getPaginatedData(filtered, paginationState.home);
+
+    // ==========================================
+    // 🔥 แก้ไข 2: Logic ตัดแบ่งหน้า (Slicing) แบบใหม่
+    // ==========================================
+    const perPage = window.itemsPerPage || 10;
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / perPage) || 1;
+
+    // ป้องกันเลขหน้าเกินจริง
+    if (window.paginationState.student > totalPages) window.paginationState.student = totalPages;
+    if (window.paginationState.student < 1) window.paginationState.student = 1;
+
+    const currentPage = window.paginationState.student;
+    const startIndex = (currentPage - 1) * perPage;
+    
+    // ตัดข้อมูลที่จะแสดง
+    const paginatedData = filtered.slice(startIndex, startIndex + perPage);
+
+    // ==========================================
+
     
     // Sync Checkbox
     const selectAllCheckbox = document.getElementById('select-all');
@@ -1279,6 +1301,7 @@ window.renderStudentList = (resetPage = true) => {
 
     const baseRate = (config && config.interest_rate) ? config.interest_rate : 1.0;
 
+    // วาดตาราง (ใช้ paginatedData แทน)
     tbody.innerHTML = paginatedData.map(s => {
         // --- 🏰 1. ข้อมูลกิลด์ ---
         let guildBadge = '';
@@ -1290,7 +1313,6 @@ window.renderStudentList = (resetPage = true) => {
             const g = allGuilds.find(x => x.id === s.guild_id);
             if (g) {
                 if (g.buff_interest) guildBonus = parseFloat(g.buff_interest);
-                // เก็บค่าบัฟกิลด์ไว้นำไปรวม
                 const activeBuffs = getGuildActiveBuffs(g.id); 
                 if(activeBuffs.discount) guildDiscount = parseFloat(activeBuffs.discount);
                 if(activeBuffs.point_boost) guildBoost = parseFloat(activeBuffs.point_boost);
@@ -1301,10 +1323,8 @@ window.renderStudentList = (resetPage = true) => {
 
         // --- 🕒 2. คำนวณเวลาและค่าบัฟส่วนตัว ---
         let buffBadgesHtml = '';
-        
-        // A. ดอกเบี้ยส่วนตัว
         const interestTime = getRemainingTimeText(s.special_interest_end);
-        const couponIntTime = getRemainingTimeText(s.buff_interest_end);  // แบบคูปอง (ใหม่)
+        const couponIntTime = getRemainingTimeText(s.buff_interest_end); 
 
         const val1 = interestTime ? parseFloat(s.special_interest_rate || 0) : 0;
         const val2 = couponIntTime ? parseFloat(s.buff_interest_val || 0) : 0;
@@ -1315,30 +1335,25 @@ window.renderStudentList = (resetPage = true) => {
             buffBadgesHtml += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap" title="บัฟส่วนตัว: ดอกเบี้ย +${personalInterest}% เหลือ ${showIntTime}">📈 ${showIntTime}</span>`;
         }
 
-        // B. ส่วนลดส่วนตัว (Discount)
         const discountTime = getRemainingTimeText(s.buff_discount_end);
         let personalDiscount = discountTime ? parseFloat(s.buff_discount_val || 0) : 0;
         if (discountTime) {
             buffBadgesHtml += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-50 text-red-700 border border-red-200 whitespace-nowrap" title="บัฟส่วนตัว: ลดราคา ${personalDiscount}% เหลือ ${discountTime}">🏷️ ${discountTime}</span>`;
         }
 
-        // C. บูสต์แต้มส่วนตัว (Point Boost)
         const boostTime = getRemainingTimeText(s.buff_points_end);
         let personalBoost = boostTime ? parseFloat(s.buff_points_val || 0) : 0;
         if (boostTime) {
             buffBadgesHtml += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap" title="บัฟส่วนตัว: บูสต์แต้ม +${personalBoost}% เหลือ ${boostTime}">🚀 ${boostTime}</span>`;
         }
 
-        // --- 🏦 3. คำนวณดอกเบี้ยรวม (ทบกัน: Base + Guild + Personal) ---
-        // 🔥 ตรงนี้คือหัวใจสำคัญ: บวกทบกันให้หมด
+        // --- 🏦 3. คำนวณดอกเบี้ยรวม ---
         let finalRate = baseRate + guildBonus + personalInterest;
-        
         let rateTag = '';
         if (finalRate > baseRate) {
             let icon = '🔥';
             let colorClass = 'bg-green-50 text-green-700 border-green-200';
             
-            // ถ้ามีบัฟส่วนตัว ให้สีม่วง (Premium)
             if (personalInterest > 0) { 
                 icon = '🌟'; 
                 colorClass = 'bg-purple-50 text-purple-700 border-purple-200'; 
@@ -1347,7 +1362,6 @@ window.renderStudentList = (resetPage = true) => {
                 icon = '🛡️'; 
             } 
 
-            // Tooltip แจกแจงที่มาของตัวเลข
             const tooltipTitle = `รวม: ${finalRate.toFixed(2)}% (พื้นฐาน ${(baseRate).toFixed(2)}% + กิลด์ ${(guildBonus).toFixed(2)}% + ส่วนตัว ${(personalInterest).toFixed(2)}%)`;
 
             rateTag = `
@@ -1370,39 +1384,49 @@ window.renderStudentList = (resetPage = true) => {
             }
         }
 
-        // คำนวณเงิน
         const pendingInterest = calculatePendingInterest(s);
         const totalWithdrawable = (s.bank_points || 0) + pendingInterest;
         const isSelected = selectedStudentIds.has(s.id);
         const rowClass = isSelected ? 'bg-green-50 border-l-4 border-l-green-500' : 'hover:bg-gray-50 border-l-4 border-l-transparent';
 
+        // 🔥🔥🔥 [แทรกใหม่ 1] เตรียม HTML สำหรับสกิน 🔥🔥🔥
+        const frameUrl = s.equipped_frame || ''; 
+        const bgUrl = s.equipped_bg || '';
+
+        // สร้าง HTML กรอบรูป (ครอบตัว Checkbox เดิม)
+        const avatarHtml = `
+        <div class="relative w-10 h-10 flex items-center justify-center mx-auto">
+            ${frameUrl ? `<img src="${frameUrl}" class="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none drop-shadow-md scale-125">` : ''}
+            
+            <div class="w-5 h-5 rounded border flex items-center justify-center transition-all z-10 
+                ${isSelected ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 bg-white'}">
+                ${isSelected ? '✓' : ''}
+            </div>
+        </div>`;
+
+        // สร้าง Style พื้นหลังชื่อ (ถ้ามี)
+        const nameBgStyle = bgUrl ? `background-image: url('${bgUrl}'); background-size: cover; background-position: center; color: white; text-shadow: 1px 1px 2px black; padding: 2px 6px; border-radius: 6px;` : '';
+        // ----------------------------------------------------
         return `
         <tr onclick="toggleSelectStudent('${s.id}')" class="cursor-pointer transition-all border-b last:border-b-0 group ${rowClass}">
             <td class="px-2 py-3 text-center">
-                <div class="w-5 h-5 rounded border flex items-center justify-center mx-auto ${isSelected ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 bg-white'}">
-                    ${isSelected ? '✓' : ''}
-                </div>
+            ${avatarHtml}
             </td>
-            
             <td class="px-2 py-3 text-xs text-gray-500 font-mono">${s.student_id}</td>
-            
             <td class="px-2 py-3">
                 <div class="flex flex-col items-start gap-1">
-                    <span class="font-bold text-gray-800 text-sm flex items-center flex-wrap gap-1 leading-snug">
+                    <span class="font-bold text-gray-800 text-sm flex items-center flex-wrap gap-1 transition-all" style="${nameBgStyle}">
                         ${s.full_name} ${guildBadge} ${itemBadge}
                     </span>
-                    
                     <div class="flex flex-wrap gap-1">
                         ${rateTag}
                         ${buffBadgesHtml}
                     </div>
                 </div>
             </td>
-
             <td class="px-2 py-3 text-center">
                 <span class="font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full text-xs">${Math.floor(s.points).toLocaleString()}</span>
             </td>
-
             <td class="px-2 py-3 text-center text-indigo-700 font-mono text-xs font-bold">
                 ${Math.floor(s.bank_points || 0).toLocaleString()}
             </td>
@@ -1420,29 +1444,26 @@ window.renderStudentList = (resetPage = true) => {
                     ${(s.pending_points || 0) > 0 ? `<div class="text-[10px] text-red-500 font-bold mt-1 bg-red-50 px-1 rounded border border-red-100">🔒 อายัด ${s.pending_points} แต้ม</div>` : ''}
                 </div>
             </td>
-
             <td class="px-2 py-3 text-center" onclick="event.stopPropagation()">
                 <div class="flex items-center justify-center gap-1">
-                    <button onclick="openBankModal('${s.id}')" class="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg border border-green-200 transition-colors" title="ธุรกรรมธนาคาร">
-                        🏦
-                    </button>
-                    <button onclick="openDonateGuildModal('${s.id}')" class="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors" title="บริจาคเข้ากิลด์">
-                        🤝
-                    </button>
-                    <button onclick="openAdminInventory('${s.id}')" class="p-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors" title="จัดการกระเป๋า (ลบของ)">
-                        🎒
-                    </button>
-                    
-                    <button onclick="openEditStudentModal('${s.id}')" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="แก้ไข">
-                        ✏️
-                    </button>
+                    <button onclick="openBankModal('${s.id}')" class="p-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg border border-green-200 transition-colors" title="ธุรกรรมธนาคาร">🏦</button>
+                    <button onclick="openDonateGuildModal('${s.id}')" class="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors" title="บริจาคเข้ากิลด์">🤝</button>
+                    <button onclick="openAdminInventory('${s.id}')" class="p-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors" title="จัดการกระเป๋า (ลบของ)">🎒</button>
+                    <button onclick="openEditStudentModal('${s.id}')" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="แก้ไข">✏️</button>
                 </div>
             </td>
-        </tr>
-        `;
+        </tr>`;
     }).join('');
     
-    document.getElementById('pagination-home').innerHTML = renderPaginationControls(filtered.length, 'home');
+    // 🔥 แก้ไข 3: เรียกปุ่มควบคุมแบบใหม่ (ไม่ต้องส่ง optionsHtml เองแล้ว)
+    if (typeof renderPaginationControls === 'function') {
+        const pContainer = document.getElementById('pagination-home');
+        if(pContainer) {
+            // ใช้ type 'student' ให้ตรงกับที่ตั้งไว้ใน Global State
+            pContainer.innerHTML = renderPaginationControls(totalItems, 'student');
+        }
+    }
+    
     renderPunishmentList();
     updateBulkUI();
 };
@@ -1658,25 +1679,22 @@ function renderRewards() {
     }
 }
 
-// Exposed to window for inline HTML calls
-// ✅ ฟังก์ชันแสดงประวัติ (ฉบับอัปเกรด: แยกสีแดง/เขียว ตามประเภทธุรกรรม)
-// ✅ ฟังก์ชันแสดงประวัติ (ฉบับอัปเกรด: แยกสีแดง/เขียว ตามประเภทธุรกรรม)
 // ==========================================
 // 📜 แสดงประวัติ (History) - เวอร์ชันสมบูรณ์ (Filter + Pagination)
 // ==========================================
 
 // ตั้งค่า Pagination State (ถ้ายังไม่มี)
-window.paginationState = window.paginationState || { history: 1 };
-const ITEMS_PER_PAGE = 10; // จำนวนรายการต่อหน้า
-
 window.renderHistory = (resetPage = true) => {
-    // 1. รีเซ็ตหน้า ถ้ามีการค้นหาใหม่
-    if (resetPage) paginationState.history = 1;
+    // ✅ 1. ตั้งค่า State ถ้ายังไม่มี
+    if (!window.paginationState) window.paginationState = { history: 1 };
+    
+    // รีเซ็ตหน้า ถ้ามีการค้นหาใหม่ (User พิมพ์ search)
+    if (resetPage) window.paginationState.history = 1;
 
     const tbody = document.getElementById('history-list');
     
-    // ดึงค่าจาก HTML (ใส่ fallback ป้องกัน Error ถ้าหา Element ไม่เจอ)
-    const searchInput = document.getElementById('history-search-input'); 
+    // ดึงค่าจาก HTML
+    const searchInput = document.getElementById('history-search-input') || document.getElementById('history-search'); 
     const filterInput = document.getElementById('history-action-filter');
 
     const searchText = (searchInput ? searchInput.value : '').toLowerCase().trim();
@@ -1684,8 +1702,13 @@ window.renderHistory = (resetPage = true) => {
 
     if (!tbody) return;
 
-    // 2. กรองข้อมูล (Logic ของคุณ + Safe Check)
-    let filtered = history.filter(h => { // ใช้ historyData แทน history
+    // ✅ 2. เลือกแหล่งข้อมูลที่ปลอดภัย (ป้องกัน Error ชื่อตัวแปร)
+    let sourceData = [];
+    if (typeof history !== 'undefined' && Array.isArray(history)) sourceData = history;
+    else if (typeof historyData !== 'undefined' && Array.isArray(historyData)) sourceData = historyData;
+
+    // 3. กรองข้อมูล (Logic เดิมของคุณ)
+    let filtered = sourceData.filter(h => { 
         
         // --- ส่วนที่ 1: เช็คคำค้นหา (ชื่อ/รหัส) ---
         let searchableId = String(h.student_id || '');
@@ -1693,7 +1716,7 @@ window.renderHistory = (resetPage = true) => {
         if (foundStudent) searchableId = String(foundStudent.student_id || '');
 
         const name = (h.student_name || '').toLowerCase();
-        const reason = (h.reason || h.details || '').toLowerCase(); // รองรับทั้ง reason และ details
+        const reason = (h.reason || h.details || '').toLowerCase(); 
         
         const isTextMatch = (
             searchText === '' || 
@@ -1702,7 +1725,7 @@ window.renderHistory = (resetPage = true) => {
             reason.includes(searchText)
         );
 
-        // --- ส่วนที่ 2: เช็คประเภท (Logic ของคุณ) ---
+        // --- ส่วนที่ 2: เช็คประเภท ---
         let isTypeMatch = false;
         const type = h.type || '';
         const action = h.action || '';
@@ -1734,10 +1757,10 @@ window.renderHistory = (resetPage = true) => {
                 action.includes('ภารกิจ') || action.includes('Quest') || action.includes('ตอบคำถาม')
             );
         }
-        else if (searchType === 'bank') { // เพิ่มธนาคารให้
+        else if (searchType === 'bank') { 
              isTypeMatch = type.includes('bank');
         }
-        else if (searchType === 'guild') { // เพิ่มกิลด์ให้
+        else if (searchType === 'guild') { 
              isTypeMatch = type.includes('guild');
         }
         else {
@@ -1747,60 +1770,75 @@ window.renderHistory = (resetPage = true) => {
         return isTextMatch && isTypeMatch; 
     });
 
-    // 3. เรียงลำดับ (ใหม่สุดขึ้นก่อน)
+    // 4. เรียงลำดับ (Logic เดิม)
     filtered.sort((a, b) => {
         const tA = a.timestamp ? (a.timestamp.seconds || new Date(a.timestamp).getTime()/1000) : 0;
         const tB = b.timestamp ? (b.timestamp.seconds || new Date(b.timestamp).getTime()/1000) : 0;
         return tB - tA;
     });
 
-    // 4. Pagination Logic (ตัดแบ่งหน้า)
-    const totalItems = filtered.length;
-    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-    const currentPage = Math.min(Math.max(1, paginationState.history), totalPages || 1);
+    // ===============================================
+    // 🔥🔥🔥 5. ส่วนที่แก้ไข: เชื่อมระบบ Pagination ใหม่ 🔥🔥🔥
+    // ===============================================
     
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const paginatedData = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    // ใช้ตัวแปร Global (window.itemsPerPage) แทนค่าคงที่
+    const perPage = window.itemsPerPage || 10; 
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / perPage) || 1;
+    
+    // ป้องกันเลขหน้าเกินจำนวนจริง
+    if (window.paginationState.history > totalPages) window.paginationState.history = totalPages;
+    if (window.paginationState.history < 1) window.paginationState.history = 1;
 
-    // 5. แสดงผลลงตาราง
+    const currentPage = window.paginationState.history;
+    
+    // ตัดแบ่งข้อมูล
+    const startIndex = (currentPage - 1) * perPage;
+    const paginatedData = filtered.slice(startIndex, startIndex + perPage);
+
+    // ===============================================
+
+    // 6. แสดงผลลงตาราง
     if (paginatedData.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-400">ไม่พบข้อมูลประวัติ</td></tr>`;
-        document.getElementById('pagination-history').innerHTML = ''; // ล้างปุ่มกด
+        // เคลียร์ปุ่มกดทิ้ง ถ้าไม่มีข้อมูล
+        if(document.getElementById('pagination-history')) document.getElementById('pagination-history').innerHTML = '';
         return;
     }
 
     tbody.innerHTML = paginatedData.map(h => {
-        // แปลงเวลา (Helper ในตัว)
+        // แปลงเวลา
         let dateStr = '-';
         if (h.timestamp) {
-            const d = h.timestamp.toDate ? h.timestamp.toDate() : new Date(h.timestamp);
+            const d = (typeof h.timestamp.toDate === 'function') ? h.timestamp.toDate() : new Date(h.timestamp);
             dateStr = d.toLocaleString('th-TH', { 
                 day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' 
             });
         }
 
-        // Logic การแสดงผล +/- (ของคุณ)
         const expenseTypes = [
             'buy_item', 'bank_deposit', 'deposit', 'punishment', 'penalty',
             'deduct_points', 'remove_points', 'create_guild', 
             'gacha', 'clear_red_card', 'redeem', 'guild_use_item'
         ];
 
-        const isNegative = expenseTypes.includes(h.type) || h.amount < 0 || (h.action || '').includes('ถอน');
+        const safeAmount = h.amount || 0;
+        const safeAction = h.action || '';
+        const safeType = h.type || '';
         
-        // ยกเว้น bank_withdraw คือได้เงิน (+)
-        const isPositive = (!isNegative || h.type === 'bank_withdraw' || h.type === 'withdraw') && !(h.amount < 0 && h.type !== 'bank_withdraw');
+        const isNegative = expenseTypes.includes(safeType) || safeAmount < 0 || safeAction.includes('ถอน');
+        
+        const isPositive = (!isNegative || safeType === 'bank_withdraw' || safeType === 'withdraw') && !(safeAmount < 0 && safeType !== 'bank_withdraw');
 
-        const amountVal = Math.floor(Math.abs(h.amount || 0)).toLocaleString();
+        const amountVal = Math.floor(Math.abs(safeAmount)).toLocaleString();
         
         const amountHtml = !isPositive 
             ? `<span class="text-red-600 font-bold">-${amountVal}</span>` 
             : `<span class="text-green-600 font-bold">+${amountVal}</span>`;
 
-        // หา ID นักเรียน
-        let displayStudentID = h.student_id || '-';
+        let displayStudentID = '-';
         const foundStudent = students.find(s => s.id === h.student_id);
-        if (foundStudent) displayStudentID = foundStudent.student_id;
+        if (foundStudent) displayStudentID = foundStudent.student_id || '-';
 
         return `
         <tr class="hover:bg-gray-50 border-b last:border-b-0 text-sm group transition-colors">
@@ -1811,7 +1849,7 @@ window.renderHistory = (resetPage = true) => {
             </td>
             <td class="px-4 py-3">
                 <div class="flex flex-col">
-                    <span class="font-bold text-gray-800">${h.action}</span>
+                    <span class="font-bold text-gray-800">${safeAction}</span>
                     <span class="text-xs text-gray-400">${h.reason || h.details || ''}</span>
                 </div>
             </td>
@@ -1822,8 +1860,11 @@ window.renderHistory = (resetPage = true) => {
         </tr>`;
     }).join('');
 
-    // 6. วาดปุ่มเปลี่ยนหน้า
-    renderPaginationControls(totalItems, 'history', ITEMS_PER_PAGE);
+    // 🔥 7. เรียกฟังก์ชันวาดปุ่มควบคุม (Render Controls)
+    // ส่งแค่ totalItems กับ 'history' ก็พอ เพราะฟังก์ชันใหม่มันดึง itemsPerPage จาก Global เอง
+    if (typeof renderPaginationControls === 'function') {
+        document.getElementById('pagination-history').innerHTML = renderPaginationControls(totalItems, 'history');
+    }
 };
 
 // ==========================================
@@ -1876,11 +1917,11 @@ window.renderPaginationControls = (totalItems, context, perPage = 10) => {
     container.innerHTML = html;
 };
 
-// ฟังก์ชันเปลี่ยนหน้า
+/* ฟังก์ชันเปลี่ยนหน้า
 window.changePage = (context, direction) => {
     paginationState[context] += direction;
     if (context === 'history') renderHistory(false); // false = ไม่ต้อง reset หน้า 1
-};
+};*/
 
 
 // --- HELPER: CUSTOM CONFIRM MODAL ---
@@ -3120,12 +3161,6 @@ function calculatePendingInterest(student) {
 let currentBankTarget = null;
 
 // ==========================================
-// 🏦 OPEN BANK MODAL (แก้ไข: ให้เด็กกดเปิดได้)
-// ==========================================
-// ==========================================
-// 🏦 OPEN BANK MODAL (แก้ไข: รองรับการเรียกแบบไม่ระบุ ID)
-// ==========================================
-// ==========================================
 // 🏦 OPEN BANK MODAL (ฉบับสมบูรณ์)
 // ==========================================
 window.openBankModal = (studentId) => {
@@ -3648,132 +3683,6 @@ window.handleRestoreFile = async (el) => {
     reader.readAsText(file);
 };
 
-// --- REPORT & CHART LOGIC ---
-let pointsChartInstance = null;
-let redCardsChartInstance = null;
-
-// ✅ 1. คำนวณและแสดงตารางรายงาน (เปลี่ยนเป็นใบเตือน)
-window.renderClassReport = () => {
-    // 1. Group Data by Class
-    const classStats = {};
-    
-    students.forEach(s => {
-        const cls = s.class_name ? s.class_name.trim() : 'ไม่ระบุ';
-        // เปลี่ยนจาก red_cards เป็น warning_cards
-        if (!classStats[cls]) {
-            classStats[cls] = { name: cls, count: 0, points: 0, warning_cards: 0 };
-        }
-        classStats[cls].count++;
-        classStats[cls].points += (s.points || 0);
-        classStats[cls].warning_cards += (s.warning_cards || 0);
-    });
-
-    // Convert to Array & Sort by Name
-    const reportData = Object.values(classStats).sort((a, b) => a.name.localeCompare(b.name, 'th'));
-
-    // 2. Render Table
-    const tbody = document.getElementById('report-class-list');
-    tbody.innerHTML = reportData.map(c => `
-        <tr class="hover:bg-gray-50">
-            <td class="px-6 py-4 font-bold text-gray-800">${c.name}</td>
-            <td class="px-6 py-4 text-center">${c.count} คน</td>
-            <td class="px-6 py-4 text-center font-bold text-blue-600">${Math.floor(c.points).toLocaleString()}</td>
-            <td class="px-6 py-4 text-center text-gray-500">${(c.points / c.count).toFixed(2)}</td>
-            <td class="px-6 py-4 text-center font-bold ${c.warning_cards > 0 ? 'text-yellow-600' : 'text-gray-300'}">${c.warning_cards}</td>
-        </tr>
-    `).join('');
-
-    // 3. Render Charts
-    renderCharts(reportData);
-};
-
-// ✅ 2. สร้างกราฟ (เปลี่ยนกราฟขวาเป็นใบเตือน สีเหลือง)
-function renderCharts(data) {
-    // Prepare Data
-    const labels = data.map(d => d.name);
-    const pointsData = data.map(d => d.points);
-    const warningsData = data.map(d => d.warning_cards); // ใช้ข้อมูลใบเตือน
-
-    // Destroy old instances if exist
-    if (pointsChartInstance) pointsChartInstance.destroy();
-    if (redCardsChartInstance) redCardsChartInstance.destroy();
-
-    // Chart 1: Points (เหมือนเดิม)
-    const ctxPoints = document.getElementById('chart-points').getContext('2d');
-    pointsChartInstance = new Chart(ctxPoints, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'แต้มรวม',
-                data: pointsData,
-                backgroundColor: 'rgba(59, 130, 246, 0.6)',
-                borderColor: 'rgba(59, 130, 246, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: { responsive: true, scales: { y: { beginAtZero: true } } }
-    });
-
-    // Chart 2: Warning Cards (เปลี่ยนสีและข้อมูล)
-    const ctxRed = document.getElementById('chart-redcards').getContext('2d'); // ใช้ ID เดิมก็ได้ ไม่ต้องแก HTML
-    redCardsChartInstance = new Chart(ctxRed, {
-        type: 'line', 
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'ใบเตือนรวม', // เปลี่ยนป้ายชื่อ
-                data: warningsData,
-                backgroundColor: 'rgba(234, 179, 8, 0.2)', // สีเหลือง (Yellow-500)
-                borderColor: 'rgba(234, 179, 8, 1)',
-                borderWidth: 2,
-                tension: 0.3,
-                fill: true
-            }]
-        },
-        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-    });
-}
-
-// ✅ 3. Export CSV (อัปเดตหัวตารางและข้อมูล)
-window.exportClassReportCSV = () => {
-    // Recalculate Data for Export
-    const classStats = {};
-    students.forEach(s => {
-        const cls = s.class_name ? s.class_name.trim() : 'ไม่ระบุ';
-        if (!classStats[cls]) classStats[cls] = { name: cls, count: 0, points: 0, warning_cards: 0 };
-        classStats[cls].count++;
-        classStats[cls].points += (s.points || 0);
-        classStats[cls].warning_cards += (s.warning_cards || 0);
-    });
-    const reportData = Object.values(classStats).sort((a, b) => a.name.localeCompare(b.name, 'th'));
-
-    // CSV Header (เปลี่ยน "จำนวนใบแดง" -> "จำนวนใบเตือน")
-    let csvContent = "\uFEFFชั้นเรียน,จำนวนนักเรียน,แต้มรวม,คะแนนเฉลี่ย,จำนวนใบเตือน\n";
-    
-    reportData.forEach(row => {
-        const avg = (row.points / row.count).toFixed(2);
-        csvContent += `${row.name},${row.count},${row.points},${avg},${row.warning_cards}\n`;
-    });
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "classroom_report.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-
-// Update switchTab to render report when clicked
-const originalSwitchTab = window.switchTab;
-window.switchTab = (tabName) => {
-    originalSwitchTab(tabName);
-    if (tabName === 'report') {
-        renderClassReport();
-    }
-};
 
 // --- QUESTS SYSTEM ---
 window.showAddQuestModal = () => document.getElementById('add-quest-modal').classList.remove('hidden');
@@ -4697,10 +4606,76 @@ window.useItem = async (itemId, itemName) => {
     const inventoryItem = s.inventory.find(i => (i.id || i.instance_id) === itemId);
     if(!inventoryItem) return alert('ไอเทมหายไปแล้ว');
 
+    if (inventoryItem.expired_at) {
+        // แปลงเวลา (รองรับทั้ง Timestamp ของ Firebase และ Text)
+        const expDate = inventoryItem.expired_at.seconds 
+            ? new Date(inventoryItem.expired_at.seconds * 1000) 
+            : new Date(inventoryItem.expired_at);
+
+        // ถ้าเวลาปัจจุบัน เลยเวลาหมดอายุแล้ว
+        if (new Date() > expDate) {
+            alert(`⛔ ไอเทมนี้หมดอายุแล้ว!\n(หมดอายุเมื่อ ${expDate.toLocaleDateString('th-TH')})\n\nระบบจะลบไอเทมทิ้งทันที`);
+
+            // สั่งลบไอเทมออกจาก DB ทันที
+            const batch = writeBatch(db);
+            const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
+            
+            // กรองเอาไอเทมชิ้นนี้ออก
+            const newInventory = s.inventory.filter(i => (i.id || i.instance_id) !== itemId);
+            batch.update(sRef, { inventory: newInventory });
+            
+            await batch.commit();
+
+            // รีเฟรชหน้าจอ
+            if(typeof renderStudentList === 'function') renderStudentList(false);
+            if(typeof openAdminInventory === 'function') openAdminInventory(s.id);
+            
+            return; // 🛑 หยุดการทำงานทันที (ห้ามไปทำบรรทัดล่างต่อ)
+        }
+    }
+
     // เตรียมตัวแปร Database
     const batch = writeBatch(db);
     const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
     const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
+
+    // LOGIC SKIN
+
+    if (inventoryItem.type && inventoryItem.type.startsWith('skin_')) {
+        let updateData = {};
+        let logMsg = "";
+
+        if (inventoryItem.type === 'skin_frame') {
+            updateData.equipped_frame = inventoryItem.image;
+            logMsg = `สวมใส่กรอบรูป: ${itemName}`;
+        } else if (inventoryItem.type === 'skin_bg') {
+            updateData.equipped_bg = inventoryItem.image;
+            logMsg = `เปลี่ยนพื้นหลังชื่อ: ${itemName}`;
+        }
+
+        // อัปเดตข้อมูลนักเรียน (โดยไม่ยุ่งกับ inventory)
+        batch.update(sRef, updateData);
+
+        // บันทึกประวัติ
+        batch.set(hRef, {
+            student_id: s.id,
+            student_name: s.full_name,
+            action: logMsg,
+            amount: 0,
+            type: 'equip_skin',
+            timestamp: serverTimestamp()
+        });
+
+        await batch.commit();
+        alert(`สวมใส่ "${itemName}" เรียบร้อย!`);
+        
+        // รีเฟรชหน้าจอ
+        if(typeof renderStudentList === 'function') renderStudentList(false);
+        if(typeof openAdminInventory === 'function') openAdminInventory(s.id); // รีเฟรชหน้ากระเป๋า (ถ้าเปิดอยู่)
+        
+        return; // 🛑 จบการทำงานทันที (ไม่ไปทำส่วนลบของด้านล่าง)
+    }
+    // ============================================================
 
     // ลบไอเทมเดิมออกก่อน (ใช้แล้วต้องหายไป)
     const newInventory = s.inventory.filter(i => (i.id || i.instance_id) !== itemId);
@@ -4859,14 +4834,14 @@ window.useItem = async (itemId, itemName) => {
                 resultSub = 'การ์ดแต้มถูกเก็บเข้ากระเป๋าแล้ว';
 
             }  else if (wonSlot.type === 'interest') {
-                const days = (wonSlot.hours / 24).toFixed(1).replace('.0', '');
-                newCard.name = `บัตรดอกเบี้ยเทพ ${wonSlot.rate}% (${days} วัน)`;
+                const hours_buff = wonSlot.hours;
+                newCard.name = `บัตรดอกเบี้ยเทพ ${wonSlot.rate}% (${hours_buff} ชั่วโมง)`;
                 newCard.type = 'instant_interest';
                 newCard.rate = wonSlot.rate;
                 newCard.hours = wonSlot.hours;
                 newCard.image = '📈';
                 resultIcon = '📈';
-                resultTitle = `ดอกเบี้ย ${wonSlot.rate}% นาน ${days} วัน!`;
+                resultTitle = `ดอกเบี้ย ${wonSlot.rate}% นาน ${hours_buff} ชั่วโมง!`;
                 resultSub = 'ใช้เมื่อไหร่ ดอกเบี้ยพุ่งเมื่อนั้น!';
             }
             else if (wonSlot.type === 'text') {
@@ -5246,15 +5221,18 @@ window.handleCreateGuild = async (e) => {
     }
 };
 
-// ฟังก์ชันแสดงหน้ากิลด์ (ค้นหาเทพๆ: ชื่อกิลด์ + ชื่อสมาชิก + เลขประจำตัว + ชั้นเรียน)
+// ==========================================
+// 🏰 Render Guild Dashboard (Pagination ใหม่)
+// ==========================================
 window.renderGuildsDashboard = (resetPage = true) => {
-    if (resetPage) paginationState.guilds = 1;
+    // 1. ตั้งค่า State
+    if (!window.paginationState) window.paginationState = { guild: 1 };
+    if (resetPage) window.paginationState.guild = 1;
 
     const board = document.getElementById('guild-leaderboard');
     const listBody = document.getElementById('guild-list-body');
-    
-    // อัปเดต Placeholder ให้รู้ว่าค้นหาอะไรได้บ้าง
     const searchInput = document.getElementById('guild-search-input');
+    
     if (searchInput) {
          searchInput.placeholder = "ค้นหาชื่อกิลด์, สมาชิก, เลขประจำตัว หรือชั้นเรียน...";
     }
@@ -5262,15 +5240,12 @@ window.renderGuildsDashboard = (resetPage = true) => {
     
     if(!board || !listBody) return;
 
-    // 1. คำนวณ Stat และเตรียมข้อมูลสำหรับ Search Engine
+    // 2. คำนวณ Stat และเตรียมข้อมูลสำหรับ Search Engine
     const guildStats = guilds.map(g => {
         const members = students.filter(s => s.guild_id === g.id);
         const totalPoints = members.reduce((sum, s) => sum + (s.points || 0), 0);
         
-        // 🔥 รวมพลัง Search: เอาทุกอย่างมายำรวมกันเป็นก้อนเดียว
-        // - ชื่อสมาชิก (full_name)
-        // - เลขประจำตัว (student_id)
-        // - ชั้นเรียน (class_name)
+        // Search Context: รวมข้อมูลสมาชิกทั้งหมดเป็นก้อนเดียว
         const searchContext = members.map(s => 
             `${s.full_name} ${s.student_id || ''} ${s.class_name || ''}`
         ).join(' ').toLowerCase();
@@ -5279,15 +5254,14 @@ window.renderGuildsDashboard = (resetPage = true) => {
             ...g, 
             memberCount: members.length, 
             totalPoints: totalPoints,
-            // เอาชื่อกิลด์มารวมกับข้อมูลสมาชิกเพื่อใช้ค้นหา
             fullSearchText: `${g.name.toLowerCase()} ${searchContext}`
         };
     });
 
-    // 2. เรียงลำดับตามแต้มรวม (Top 3)
+    // 3. เรียงลำดับตามแต้มรวม (Top 3)
     guildStats.sort((a, b) => b.totalPoints - a.totalPoints);
 
-    // 3. Render Top 3 Cards (คงเดิม)
+    // 4. Render Top 3 Cards (แสดงเสมอ ไม่ขึ้นกับ Pagination)
     board.innerHTML = guildStats.slice(0, 3).map((g, index) => {
         const colors = [
             'bg-yellow-100 border-yellow-300 text-yellow-800',
@@ -5314,17 +5288,34 @@ window.renderGuildsDashboard = (resetPage = true) => {
         </div>`;
     }).join('');
 
-    // 4. กรองข้อมูล (ค้นหาจากก้อน fullSearchText ที่เตรียมไว้)
+    // 5. กรองข้อมูล (Search)
     const filteredGuilds = guildStats.filter(g => g.fullSearchText.includes(searchTerm));
 
-    // 5. แบ่งหน้า (Pagination)
-    const { data: paginatedData } = getPaginatedData(filteredGuilds, paginationState.guilds);
+    // ==========================================
+    // 🔥 แก้ไข Logic Pagination (Global)
+    // ==========================================
+    const perPage = window.itemsPerPage || 10;
+    const totalItems = filteredGuilds.length;
+    const totalPages = Math.ceil(totalItems / perPage) || 1;
 
-    // 6. Render List Table (Logic เดิม)
+    // ป้องกันเลขหน้าเกินจริง
+    if (window.paginationState.guild > totalPages) window.paginationState.guild = totalPages;
+    if (window.paginationState.guild < 1) window.paginationState.guild = 1;
+
+    const currentPage = window.paginationState.guild;
+    const startIndex = (currentPage - 1) * perPage;
+    
+    // ตัดข้อมูล
+    const paginatedData = filteredGuilds.slice(startIndex, startIndex + perPage);
+
+    // ==========================================
+
+    // 6. Render List Table
     if (paginatedData.length === 0) {
-        listBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-400">ไม่พบกิลด์ที่ค้นหา</td></tr>`;
+        listBody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-400">ไม่พบกิลด์ที่ค้นหา</td></tr>`;
     } else {
         listBody.innerHTML = paginatedData.map(g => {
+            // หาอันดับจริงจากข้อมูลทั้งหมด (ไม่ใช่ข้อมูลที่ตัดหน้ามา)
             const realRank = guildStats.findIndex(x => x.id === g.id) + 1;
             const buffs = getGuildActiveBuffs(g.id);
             let buffBadges = '';
@@ -5362,15 +5353,19 @@ window.renderGuildsDashboard = (resetPage = true) => {
                     </div>
                 </td>
             </tr>
-        `}).join('');
+            `}).join('');
     }
 
-    // 7. Render Pagination Controls
-    const paginationContainer = document.getElementById('pagination-guilds');
-    if (paginationContainer) {
-        paginationContainer.innerHTML = renderPaginationControls(filteredGuilds.length, 'guilds');
+    // 🔥 7. Render Pagination Controls (ใช้ปุ่มแบบใหม่)
+    // ตรงนี้สำคัญ: HTML ID ต้องเป็น 'pagination-guild' เพื่อให้ตรงกับ type 'guild' ที่เราใช้ใน state
+    if (typeof renderPaginationControls === 'function') {
+        const paginationContainer = document.getElementById('pagination-guild'); // ID ใน HTML
+        if (paginationContainer) {
+            paginationContainer.innerHTML = renderPaginationControls(totalItems, 'guild'); // ส่ง type 'guild'
+        }
     }
 };
+
 
 let currentManageGuildId = null;
 
@@ -6683,6 +6678,10 @@ window.confirmBulkGiveReward = async () => {
             const batch = writeBatch(db);
             const timestamp = serverTimestamp();
             const now = Date.now();
+            const daysToExpire = 7;
+            const expireDate = new Date();
+            expireDate.setDate(expireDate.getDate() + daysToExpire);
+            const expireString = expireDate.toISOString();
             let successCount = 0;
 
             selectedStudentIds.forEach(sid => {
@@ -6701,7 +6700,8 @@ window.confirmBulkGiveReward = async () => {
                         type: 'gacha_box', // ระบุประเภทว่าเป็นกล่องสุ่ม
                         effect: reward.effect || 'none',
                         acquired_at: now,
-                        gacha_pool: reward.gacha_pool || null
+                        gacha_pool: reward.gacha_pool || null,
+                        expired_at: expireString
                     }));
 
                     // 1. ยัดใส่กระเป๋านักเรียน (Inventory)
@@ -8488,6 +8488,13 @@ window.renderStudentGuild = () => {
                         <div class="bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-2 backdrop-blur-sm">
                             💸 ค่าปรับฉีกสัญญา ${(parseInt(myGuild.rule_fee) || 0).toLocaleString()} แต้ม
                         </div>
+                        <div class="bg-indigo-800/40 px-3 py-1.5 rounded-lg border border-indigo-400/30 backdrop-blur-sm shadow-sm">
+                            <div class="text-xl font-bold text-amber-300 leading-none flex items-center justify-end gap-1">
+                                ${Math.floor(myGuild.fund_points || 0).toLocaleString()} 
+                                <span class="text-sm">💵</span>
+                            </div>
+                            <div class="text-indigo-100 text-[10px] mt-0.5">กองทุนกลาง (แต้ม)</div>
+                        </div>
                         
                     </div>
                 </div>
@@ -9916,7 +9923,7 @@ window.updateBrokerPortfolioInfo = () => {
 
     const s = students.find(st => st.id === studentId);
     if (s) {
-        cashSpan.textContent = s.points.toLocaleString();
+        cashSpan.textContent = Math.floor(s.points).toLocaleString();
         infoBox.classList.remove('hidden');
         calculateBrokerLimits();
     }
@@ -9964,7 +9971,7 @@ window.updateBrokerTotal = () => {
             document.getElementById('broker-total').className = 'text-xl font-bold text-red-600'; 
         } else {
             netAmount = rawAmount - fee; // ขาย: ราคาของ - ค่าธรรมเนียม
-            text = `${Math.floor(netAmount).toLocaleString()} (หัก Fee ${fee})`;
+            text = `${Math.floor(netAmount).toLocaleString()} (หัก Fee: ${fee})`;
             
             // เปลี่ยนสีตัวเลข
             document.getElementById('broker-total').className = 'text-xl font-bold text-green-600';
@@ -10288,6 +10295,29 @@ window.openAdminInventory = (studentId) => {
             if(item.type?.includes('gacha')) icon = '🎲';
             if(item.is_coupon) icon = '🎫';
             
+            let dateDisplay = '-';
+            // เช็คว่ามีฟิลด์ acquired_at หรือ bought_at ไหม (เผื่อใช้ชื่อต่างกัน)
+            const rawDate = item.acquired_at || item.bought_at; 
+
+            if (rawDate) {
+                let dateObj;
+                // กรณี 1: เป็น Firebase Timestamp (มี .seconds)
+                if (rawDate.seconds) {
+                    dateObj = new Date(rawDate.seconds * 1000);
+                } 
+                // กรณี 2: เป็น Date.now() (ตัวเลข) หรือ String ISO
+                else {
+                    dateObj = new Date(rawDate);
+                }
+
+                // เช็คว่าเป็นวันที่ที่ถูกต้องหรือไม่
+                if (!isNaN(dateObj.getTime())) {
+                    dateDisplay = dateObj.toLocaleDateString('th-TH', { 
+                        day: 'numeric', month: 'short', year: '2-digit' 
+                    });
+                }
+            }
+
             div.innerHTML = `
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shadow-inner">
@@ -10960,4 +10990,107 @@ window.useGuildItem = async (itemUuid) => {
         showLoading(false);
         Swal.fire('Error', e.message, 'error');
     }
+};
+
+// ==========================================
+// 🎮 PAGINATION CONTROLLER (ตัวควบคุมการเปลี่ยนหน้า)
+// ==========================================
+
+// 1. ตั้งค่าตัวแปร Global (ถ้ายังไม่มี)
+window.itemsPerPage = window.itemsPerPage || 10; // ค่าเริ่มต้น 10 แถว
+window.paginationState = window.paginationState || { 
+    history: 1, 
+    students: 1, 
+    guilds: 1,
+    rewards: 1
+};
+
+// 2. ฟังก์ชันเปลี่ยนหน้า (Next/Prev)
+window.changePage = (type, direction) => {
+    // อัปเดตเลขหน้า
+    if (!window.paginationState[type]) window.paginationState[type] = 1;
+    window.paginationState[type] += direction;
+
+    // ป้องกันเลขหน้าติดลบ (ส่วนเลขหน้าเกินจำนวนสูงสุด จะถูกดักในฟังก์ชัน render ของแต่ละหน้าเอง)
+    if (window.paginationState[type] < 1) window.paginationState[type] = 1;
+
+    // 🔥 สั่งรีเฟรชหน้าจอ (Routing)
+    refreshViewByType(type);
+};
+
+// 3. ฟังก์ชันเปลี่ยนจำนวนแถวต่อหน้า (10, 20, 50)
+window.changeItemsPerPage = (type, value) => {
+    window.itemsPerPage = parseInt(value);
+    window.paginationState[type] = 1; // รีเซ็ตกลับไปหน้า 1 เสมอเมื่อเปลี่ยนจำนวนแถว
+    
+    // 🔥 สั่งรีเฟรชหน้าจอ
+    refreshViewByType(type);
+};
+
+// 4. ฟังก์ชัน Router: เลือกฟังก์ชันที่จะวาดใหม่ตามประเภท
+const refreshViewByType = (type) => {
+    console.log(`🔄 Refreshing view: ${type}, Page: ${window.paginationState[type]}`);
+    
+    switch (type) {
+        case 'history':
+            if (typeof renderHistory === 'function') renderHistory(false); // false = ห้ามรีเซ็ตหน้า 1
+            break;
+            
+        case 'student': // หรือ 'students' เช็คตามที่คุณใช้จริง
+        case 'students':
+            if (typeof renderStudentList === 'function') renderStudentList(false);
+            break;
+            
+        case 'guild':
+        case 'guilds':
+            if (typeof renderGuildsDashboard === 'function') renderGuildsDashboard(false); 
+            break;
+
+        case 'reward':
+        case 'rewards':
+            if (typeof renderRewards === 'function') renderRewards();
+            break;
+            
+        default:
+            console.warn('ไม่พบฟังก์ชันสำหรับ Render ประเภท:', type);
+    }
+};
+
+// 5. ฟังก์ชันวาดปุ่ม (ใช้โค้ดของคุณ แต่ปรับให้ใช้ Global Variable)
+window.renderPaginationControls = (totalItems, type) => {
+    const currentPage = window.paginationState[type] || 1;
+    // ใช้ window.itemsPerPage เพื่อให้ค่าตรงกันทั้งระบบ
+    const totalPages = Math.ceil(totalItems / window.itemsPerPage) || 1;
+    
+    if (totalItems === 0) return '';
+    
+    const options = [10, 20, 50, 100];
+    const optionsHtml = options.map(opt => 
+        `<option value="${opt}" ${opt === window.itemsPerPage ? 'selected' : ''}>${opt} แถว</option>`
+    ).join('');
+
+    return `
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-600 w-full mt-4 select-none">
+            <div class="flex items-center gap-2">
+                <span>แสดง</span>
+                <select onchange="changeItemsPerPage('${type}', this.value)" class="border rounded p-1 bg-white focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+                    ${optionsHtml}
+                </select>
+                <span>รายการ</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="changePage('${type}', -1)" ${currentPage === 1 ? 'disabled' : ''} 
+                    class="px-3 py-1 bg-white border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    ก่อนหน้า
+                </button>
+                
+                <span class="font-bold text-indigo-600 mx-2">หน้า ${currentPage} / ${totalPages}</span>
+                
+                <button onclick="changePage('${type}', 1)" ${currentPage >= totalPages ? 'disabled' : ''} 
+                    class="px-3 py-1 bg-white border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    ถัดไป
+                </button>
+            </div>
+        </div>
+    `;
 };
