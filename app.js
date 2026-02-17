@@ -2307,23 +2307,43 @@ window.toggleSelectStudent = (id) => {
     renderStudentList(false);
 };
 
-// Header "Select All" Handler (Toggles current page)
 window.toggleSelectAll = () => {
     const allCheckbox = document.getElementById('select-all');
+    if (!allCheckbox) return;
+
     const isChecked = allCheckbox.checked;
     
-    // Get currently visible students (based on pagination/search)
+    // 1. กรองข้อมูล (Search Logic)
     const filter = document.getElementById('search-input').value.toLowerCase();
     let filtered = students.filter(s => 
         s.full_name.toLowerCase().includes(filter) || 
         s.student_id.includes(filter) ||
-        s.class_name.toLowerCase().includes(filter)
+        (s.class_name && s.class_name.toLowerCase().includes(filter))
     );
+
+    // 2. จัดเรียง (Sort Logic)
     if (sortState.student.col) {
         filtered = sortList(filtered, sortState.student.col, sortState.student.asc);
     }
-    const { data: visibleStudents } = getPaginatedData(filtered, paginationState.home);
 
+    // =========================================================
+    // 🔥 แก้ตรงนี้: คำนวณตัดแบ่งหน้าเอง (Manual Slice)
+    // =========================================================
+    
+    // ดึงเลขหน้าปัจจุบัน (ใช้ key 'student' ตามหน้าจอ)
+    const currentPage = window.paginationState.student || 1;
+    const perPage = window.itemsPerPage || 10;
+    
+    // คำนวณจุดตัด Start - End
+    const startIndex = (currentPage - 1) * perPage;
+    const endIndex = startIndex + perPage;
+    
+    // ตัดเอาเฉพาะนักเรียนที่โชว์ในหน้านี้
+    const visibleStudents = filtered.slice(startIndex, endIndex);
+
+    // =========================================================
+
+    // 3. วนลูปเลือก/ยกเลิกเลือก
     visibleStudents.forEach(s => {
         if (isChecked) {
             selectedStudentIds.add(s.id);
@@ -2332,8 +2352,8 @@ window.toggleSelectAll = () => {
         }
     });
 
-    // Re-render to update checkbox states visually
-    renderStudentList(false); 
+    // 4. อัปเดตหน้าจอ
+    renderStudentList(false); // false = ไม่ต้องรีเซ็ตหน้ากลับไปหน้า 1
     updateBulkUI();
 };
 
@@ -7699,8 +7719,8 @@ window.previewQuizCalculation = () => {
 
             quizQuestions.forEach(q => {
                 if (q.correctAnswer) {
-                    const studentAns = (d.answers[q.id] || '').trim().toLowerCase();
-                    const teacherAns = q.correctAnswer.trim().toLowerCase();
+                    const studentAns = String(d.answers[q.id] || "").trim().toLowerCase();
+                    const teacherAns = String(q.correctAnswer).trim().toLowerCase();
                     if (studentAns && studentAns === teacherAns) {
                         correctCount++;
                         totalScore += q.points;
