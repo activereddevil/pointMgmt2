@@ -433,6 +433,8 @@ async function initAppUI() {
     loadStreakConfig(); // โหลดค่าตั้งค่าเช็คชื่อ
     subscribeToStocks();
     initGuildListener();
+    initBossSystem();
+    loadBossDropOptions();
     
     // Clear previous intervals if any
     if (window.interestInterval) clearInterval(window.interestInterval);
@@ -441,7 +443,7 @@ async function initAppUI() {
     window.interestInterval = setInterval(() => {
         if (userRole === 'teacher') renderBankList(false); // Updated to pass false to prevent page reset on interval
         if (userRole === 'student') renderStudentDashboard();
-    }, 30000); 
+    }, 45000); 
     
 }
 
@@ -670,15 +672,15 @@ function checkCanClaim(lastClaimTimestamp) {
 
 // 4. กดรับแต้ม (Action)
 // ==========================================
-// ✅ ฟังก์ชันเช็คชื่อรายวัน (ฉบับอัปเดต: อายัดแต้มถ้ามีใบเตือน)
+// ✅ ฟังก์ชันเช็คชื่อรายวัน (ฉบับแก้ไข: ประกาศตัวแปร pointsEarned ถูกต้อง)
 // ==========================================
 window.claimDailyStreak = async () => {
-    // 1. 🔒 UI Blocking: ล็อกปุ่มทันทีที่กด (ด่านหน้า)
+    // 1. 🔒 UI Blocking
     const btn = document.getElementById('btn-claim-streak');
     const originalText = btn ? btn.innerHTML : '';
     
     if(btn) {
-        if(btn.disabled) return; // กันกดซ้ำในฝั่ง Client
+        if(btn.disabled) return;
         btn.disabled = true;
         btn.innerHTML = '<span class="animate-pulse">⏳ กำลังประมวลผล...</span>';
         btn.classList.add('bg-gray-400', 'cursor-not-allowed');
@@ -689,22 +691,20 @@ window.claimDailyStreak = async () => {
     try {
         const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentStudentData.id);
 
-        // 2. 🛡️ Transaction: หัวใจสำคัญ (ทำงานแบบ Atomic)
-        await runTransaction(db, async (transaction) => {
-            // A. อ่านข้อมูลล่าสุดสดๆ จาก Server (ห้ามใช้ตัวแปร global เก่า)
+        // 2. 🛡️ Transaction
+        // 🔥🔥🔥 แก้ไขจุดที่ Error: ต้องมี const pointsEarned = ... มารับค่าครับ
+        const pointsEarned = await runTransaction(db, async (transaction) => {
             const sDoc = await transaction.get(studentRef);
             if (!sDoc.exists()) throw "ไม่พบข้อมูลนักเรียน";
 
             const sData = sDoc.data();
             const streakData = sData.streak_data || { count: 0, last_claim: null, max: 0 };
 
-            // B. เช็คเงื่อนไข (Server-side Validation)
-            // ถ้ามีรายการไหนเช็คผ่านไปแล้ว Transaction รายการถัดไปจะมาติดตรงนี้และถูกดีดออก
             if (!checkCanClaim(streakData.last_claim)) {
                 throw "วันนี้คุณกดเช็กชื่อรับแต้มไปแล้วครับ";
             }
 
-            // C. คำนวณ Streak และแต้ม (Logic เดิม)
+            // คำนวณ Streak
             let newCount = streakData.count;
             const last = streakData.last_claim ? (streakData.last_claim.toDate ? streakData.last_claim.toDate() : new Date(streakData.last_claim)) : null;
             const now = new Date();
@@ -719,7 +719,7 @@ window.claimDailyStreak = async () => {
             
             const newMax = Math.max(streakData.max, newCount);
             
-            // คำนวณแต้ม (ดึงจาก Config Global)
+            // คำนวณแต้ม
             let pointsToAdd = streakConfig ? (streakConfig.base_points || 10) : 10;
             let milestoneBonus = 0;
             
@@ -731,7 +731,7 @@ window.claimDailyStreak = async () => {
                 }
             }
 
-            // D. เตรียมข้อมูลอัปเดต
+            // เตรียมข้อมูลอัปเดต
             const updates = {
                 streak_data: { count: newCount, max: newMax, last_claim: serverTimestamp() }
             };
@@ -740,7 +740,6 @@ window.claimDailyStreak = async () => {
             let logMsg = `เช็คชื่อรายวัน (Day ${newCount})`;
             if (milestoneBonus > 0) logMsg += ` + โบนัส ${newCount} วัน!`;
 
-            // เช็คใบเตือนเพื่ออายัดแต้ม
             if (warningCount > 0) {
                 updates.pending_points = increment(pointsToAdd);
                 logMsg += ` (ถูกอายัดจากใบเตือน ${warningCount} ใบ)`;
@@ -748,10 +747,8 @@ window.claimDailyStreak = async () => {
                 updates.points = increment(pointsToAdd);
             }
 
-            // E. เขียนลงฐานข้อมูล (ต้องทำใน Transaction เท่านั้น)
             transaction.update(studentRef, updates);
             
-            // บันทึกประวัติ (สร้าง Ref ใหม่แล้วสั่ง set ใน transaction)
             const newHistoryRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
             transaction.set(newHistoryRef, {
                 student_id: sData.student_id,
@@ -761,24 +758,31 @@ window.claimDailyStreak = async () => {
                 type: 'daily_streak',
                 timestamp: serverTimestamp()
             });
+
+            // 🔥 Return ค่าแต้มออกมาจาก Transaction เพื่อให้ตัวแปร pointsEarned รับค่า
+            return pointsToAdd; 
         });
 
         // 3. ✅ สำเร็จ
         showToast('✅ เช็คชื่อสำเร็จ!');
-        // ไม่ต้องปลดล็อกปุ่ม เพราะเช็คเสร็จแล้วปุ่มควรจะเป็นสถานะ "รับแล้ว" (ซึ่ง renderStudentDashboard จะจัดการต่อเองเมื่อข้อมูล Realtime มาถึง)
+        
+        // 🔥 สั่งตีบอส (ส่งแบบ Object { id: แต้ม })
+        if (pointsEarned > 0) {
+            await autoDamageBoss({
+                [currentStudentData.id]: pointsEarned
+            });
+        }
 
     } catch (e) {
         console.error(e);
         const msg = typeof e === 'string' ? e : e.message;
         
-        // ถ้าเป็น error ที่เรา throw เอง (เช็คไปแล้ว) ให้แจ้งเตือนเบาๆ
         if (msg.includes('เช็กชื่อไปแล้ว')) {
             showToast('⚠️ วันนี้เช็กชื่อไปแล้วครับ', 'warning');
         } else {
             showToast('❌ เกิดข้อผิดพลาด: ' + msg, 'error');
         }
 
-        // กรณี Error ให้ปลดล็อกปุ่มเพื่อให้ลองใหม่ได้
         if(btn) {
             btn.disabled = false;
             btn.innerHTML = originalText;
@@ -786,7 +790,6 @@ window.claimDailyStreak = async () => {
         }
     }
 };
-
 
 function setupNavigation() {
     const nav = document.getElementById('nav-tabs');
@@ -801,9 +804,9 @@ function setupNavigation() {
             <button onclick="switchTab('punishment')" id="tab-punishment" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">⚠️ คุมประพฤติ</button>
             <button onclick="switchTab('guilds')" id="tab-guilds" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">🏰 กิลด์</button>
             
-            <button onclick="switchTab('groups')" id="tab-btn-groups" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">👥 จัดกลุ่ม</button>
             <button onclick="switchTab('quests')" id="tab-quests" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ภารกิจ</button>
             <button onclick="switchTab('teacher-stocks')" id="tab-teacher-stocks-btn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">📈 ตลาดหุ้น</button>
+            <button onclick="switchTab('admin-boss')" id="tab-admin-boss" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">👹 จัดการบอส</button>
             
             <button onclick="switchTab('history')" id="tab-history" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">ประวัติ</button>
             <button onclick="switchTab('rewards')" id="tab-rewards" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">รางวัล</button>
@@ -824,7 +827,7 @@ function setupNavigation() {
             <button onclick="switchTab('student-guild')" id="tab-student-guild" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700">🏰 กิลด์</button>
             <button onclick="switchTab('stocks')" id="tab-stocks-btn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-all flex items-center gap-2">
             📈 ตลาดหุ้น
-        </button> 
+        </button>
         `;
         document.getElementById('teacher-reward-controls').classList.add('hidden');
         document.getElementById('teacher-history-controls').classList.add('hidden');
@@ -852,6 +855,7 @@ function subscribeToData() {
 
     unsubscribers.push(onSnapshot(collections.students(), (snapshot) => {
         students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        window.students = students;
         if (userRole === 'student') {
             const me = students.find(s => s.student_id === currentStudentData.student_id);
             if (me) {
@@ -866,6 +870,10 @@ function subscribeToData() {
             renderGuildsDashboard();
         }
         renderBankList(false); // Don't reset page on live update
+        // สั่งอัปเดต Dropdown รายชื่อคนตีบอส เมื่อข้อมูลนักเรียนมีการเปลี่ยนแปลง
+        if (typeof loadManualAttackers === 'function') {
+            loadManualAttackers();
+        }
     }, onError));
 
     unsubscribers.push(onSnapshot(collections.rewards(), (snapshot) => {
@@ -1090,63 +1098,7 @@ function formatFirestoreTimestamp(timestamp) {
     return '-';
 }
 
-// --- RENDER FUNCTIONS ---
 
-/* Pagination Helper
-function getPaginatedData(data, page) {
-    const start = (page - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    return {
-        data: data.slice(start, end),
-        totalPages: Math.ceil(data.length / itemsPerPage)
-    };
-}
-
-function renderPaginationControls(totalItems, type) {
-    const currentPage = paginationState[type];
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    
-    if (totalItems === 0) return '';
-    
-    const options = [10, 20, 50, 100];
-    const optionsHtml = options.map(opt => 
-        `<option value="${opt}" ${opt === itemsPerPage ? 'selected' : ''}>${opt} แถว</option>`
-    ).join('');
-
-    return `
-        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-600 w-full">
-            <div class="flex items-center gap-2">
-                <span>แสดง</span>
-                <select onchange="changeItemsPerPage('${type}', this.value)" class="border rounded p-1 bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
-                    ${optionsHtml}
-                </select>
-                <span>รายการ</span>
-            </div>
-            <div class="flex items-center gap-4">
-                <button onclick="changePage('${type}', -1)" ${currentPage === 1 ? 'disabled' : ''} class="px-3 py-1 bg-white border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">ก่อนหน้า</button>
-                <span>หน้า ${currentPage} / ${totalPages || 1}</span>
-                <button onclick="changePage('${type}', 1)" ${currentPage >= totalPages ? 'disabled' : ''} class="px-3 py-1 bg-white border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">ถัดไป</button>
-            </div>
-        </div>
-    `;
-}
-
-window.changePage = (type, delta) => {
-    paginationState[type] += delta;
-    if (type === 'home') renderStudentList(false);
-    if (type === 'bank') renderBankList(false);
-    if (type === 'history') renderHistory(false);
-    if (type === 'guilds') renderGuildsDashboard(false);
-};
-
-window.changeItemsPerPage = (type, val) => {
-    itemsPerPage = parseInt(val);
-    // Reset to page 1 for the current tab to avoid out of bounds
-    if (type === 'home') renderStudentList(true);
-    if (type === 'bank') renderBankList(true);
-    if (type === 'history') renderHistory(true);
-    if (type === 'guilds') renderGuildsDashboard(true);
-};*/
 
 window.switchTab = (tabName) => {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -1168,9 +1120,6 @@ window.switchTab = (tabName) => {
     }
     if (tabName === 'teacher-stocks') {
         renderTeacherStockControl();
-    }
-    if (tabName === 'groups' && typeof renderCustomGroups === 'function') {
-        renderCustomGroups();
     }
     if (tabName === 'student-guild') renderStudentGuild();
     renderBuffRulesSettings();
@@ -1516,6 +1465,7 @@ window.renderStudentDashboard = (student) => {
     } else {
         warningSection.classList.add('hidden'); // ซ่อนแผงเตือน (ถ้าเป็นเด็กดี)
     }
+
     
     const myHistory = history.filter(h => h.student_id === s.id).slice(0, 5);
     document.getElementById('std-history-list').innerHTML = myHistory.length ? myHistory.map(h =>
@@ -1538,6 +1488,7 @@ window.renderStudentDashboard = (student) => {
     renderStreakWidget(currentStudentData); // แสดง Widget เช็คชื่อ
     
 }
+
 
 // Exposed to window for inline HTML calls
 window.renderBankList = () => {
@@ -2234,6 +2185,9 @@ window.handlePointsSubmit = async (e) => {
     
     if (targetIds.length === 0) return alert('ไม่พบนักเรียนที่เลือก');
 
+    let totalDamage = 0;
+    let contributorsMap = {}; // 🔥 1. สร้างตัวแปร Map
+
     targetIds.forEach(studentId => {
         const s = students.find(std => std.id === studentId);
         if (!s) return; // Should not happen if sync is correct
@@ -2248,6 +2202,8 @@ window.handlePointsSubmit = async (e) => {
 
             if (type === 'add') {
                 finalAmount = calculateBuffedPoints(s, amount);
+
+                totalDamage += finalAmount;
                 if (finalAmount > amount) logAction += ` (Boost ${finalAmount - amount})`;
                 
                 // 🔒 เช็คใบเตือน: ถ้ามีใบเตือน -> เข้า pending_points
@@ -2257,6 +2213,7 @@ window.handlePointsSubmit = async (e) => {
                 } else {
                     batch.update(sRef, { points: increment(finalAmount) });
                 }
+                contributorsMap[studentId] = finalAmount;
                 
             } else {
                 // ถ้าลดแต้ม -> ลดจาก points ปกติ (หรือจะลด pending ก็ได้แล้วแต่ครู แต่ปกติลดแต้มหลัก)
@@ -2277,6 +2234,9 @@ window.handlePointsSubmit = async (e) => {
      
      
     await batch.commit();
+    if (Object.keys(contributorsMap).length > 0) {
+        await autoDamageBoss(contributorsMap);
+    }
     hidePointsModal();
     showToast(`บันทึกสำเร็จ (${targetIds.length} คน)`);
     
@@ -3941,8 +3901,10 @@ window.executeBulkQuest = async (questId) => {
     const timestamp = serverTimestamp();
     let count = 0;
     let totalBonusGiven = 0; // เก็บสถิติโบนัสที่แจกไป
+    let totalBossDamage = 0;
 
     const targetIds = currentQuestTargetId ? [currentQuestTargetId] : Array.from(selectedStudentIds);
+    let contributorsMap = {}; // 🔥 1. สร้างตัวแปร Map
 
     targetIds.forEach(sid => {
         const s = students.find(std => std.id === sid);
@@ -3954,6 +3916,8 @@ window.executeBulkQuest = async (questId) => {
             // 🔥 เรียกใช้ฟังก์ชันคำนวณบัฟตรงนี้!
             const { totalPoints, bonusPoints, bonusPercent } = calculateQuestPointsWithBuffs(s, baseTotalPoints);
             totalBonusGiven += bonusPoints;
+            totalBossDamage += totalPoints;
+            contributorsMap[sid] = totalPoints;
 
             // ข้อความบันทึกประวัติ (เพิ่มรายละเอียดบัฟถ้ามี)
             let historyAction = `ภารกิจสำเร็จ: ${quest.title} (x${qty})`;
@@ -3981,6 +3945,10 @@ window.executeBulkQuest = async (questId) => {
     });
 
     await batch.commit();
+    // 🔥 3. ส่งไปตีบอส
+    if (Object.keys(contributorsMap).length > 0) {
+        await autoDamageBoss(contributorsMap);
+    }
     const bulkModal = document.getElementById('bulk-quest-modal');
     if(bulkModal) bulkModal.classList.add('hidden');
     
@@ -4573,26 +4541,7 @@ ${item.image || '📦'}
     `).join('');
 }
 
-/* Update Student Dashboard Render
-const originalRenderDash = window.renderStudentDashboard || (() => {});
-window.renderStudentDashboard = () => {
-  
-    if (!currentStudentData) return;
-    // ... (Original Code) ...
-    // Add this line at the end of original renderStudentDashboard:
-    renderStudentInventory(currentStudentData);
-    
-    // *IMPORTANT*: Re-run original DOM updates from the snippet provided in file
-    // For simplicity, I recommend finding renderStudentDashboard and pasting the renderStudentInventory call at the bottom of it.
-    
-    // Re-implementing parts for safety:
-    document.getElementById('std-dash-points').textContent = Math.floor(currentStudentData.points);
-    // ... other UI updates ...
-    
-};*/
 
-// Item Usage Logic
-// Item Usage Logic (ฉบับอัปเกรด: เพิ่มระบบเรทสุ่มรางวัลใหญ่ยาก) [cite: 658-673]
 // ฟังก์ชันปิด Modal Gacha (อัปเดตใหม่: รีเฟรชกระเป๋าทันที 🎉)
 window.closeGachaModal = () => {
     document.getElementById('gacha-animation-modal').classList.add('hidden');
@@ -5171,22 +5120,7 @@ window.showGameNotification = (type, message, amount) => {
 
 // --- 🏰 GUILD SYSTEM LOGIC ---
 
-// 1. เพิ่ม Collection Reference (วางต่อจาก const collections = { ... }) [cite: 224-225]
-// * ต้องแก้ตัวแปร collections เดิม หรือเพิ่มบรรทัดนี้ในฟังก์ชัน collections เดิม *
-// collections.guilds = () => collection(db, 'artifacts', appId, 'public', 'data', 'guilds');
-// เพื่อความง่าย ให้เพิ่มฟังก์ชันนี้แยกออกมา หรือไปแก้ในตัวแปร collections ด้านบนครับ
-
-
 let guilds = [];
-
-// 2. Subscribe ข้อมูลกิลด์ (เรียกใช้ใน initAppUI หรือ subscribeToData)
-// เพิ่มบรรทัดนี้ในฟังก์ชัน subscribeToData() [cite: 264-299]
-/*
-unsubscribers.push(onSnapshot(getGuildsCol(), (snapshot) => {
-    guilds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    if(userRole === 'teacher') renderGuildsDashboard();
-}, onError));
-*/
 
 // 3. ฟังก์ชันหลัก
 window.showCreateGuildModal = () => document.getElementById('create-guild-modal').classList.remove('hidden');
@@ -5553,23 +5487,9 @@ window.toggleGuildSelection = (id) => {
 };
 
 // ==========================================
-// ฟังก์ชันบันทึกข้อมูลกิลด์ (เวอร์ชั่น: Hard Lock 🔒)
+// ฟังก์ชันบันทึกข้อมูลกิลด์
 // ==========================================
-// ==========================================
-// ฟังก์ชันบันทึกข้อมูลกิลด์ (Final Fix: จับเวลาแม่นยำ 🎯)
-// ==========================================
-// ==========================================
-// ฟังก์ชันบันทึกข้อมูลกิลด์ (เพิ่ม: บันทึกประวัติค่าปรับ 📝)
-// ==========================================
-// ==========================================
-// ฟังก์ชันบันทึกกิลด์ (Final V.2: ดักจับคนย้ายค่าย 🔀)
-// ==========================================
-// ==========================================
-// 🎨 Helper: ฟังก์ชันเรียก Modal แจ้งเตือนแบบสวย
-// ==========================================
-// ==========================================
-// 🎨 Helper: Modal แจ้งเตือน (Strict Mode)
-// ==========================================
+
 window.showGuildPenaltyModal = (type, dataList, feePerPerson, totalFee) => {
     return new Promise((resolve) => {
         const modal = document.getElementById('guild-penalty-modal');
@@ -5666,15 +5586,6 @@ window.showGuildPenaltyModal = (type, dataList, feePerPerson, totalFee) => {
 
 // ==========================================
 // ฟังก์ชันบันทึกกิลด์ (Strict Check 🛡️)
-// ==========================================
-// ==========================================
-// 💾 บันทึกข้อมูลกิลด์ + ย้ายสมาชิก + คิดดอกเบี้ย (Fixed Version)
-// ==========================================
-// ==========================================
-// 💾 บันทึกข้อมูลกิลด์ + ย้ายสมาชิก + ทบยอดธนาคาร (Fixed Undefined Error)
-// ==========================================
-// ==========================================
-// 💾 บันทึกข้อมูลกิลด์ (แก้ไขเรื่องแต้มไม่ทบ + สัญญาบัค)
 // ==========================================
 window.saveGuildData = async () => {
     if (!currentManageGuildId) return;
@@ -7792,6 +7703,8 @@ window.confirmQuizDistribution = async () => {
     const activityTag = document.getElementById('quiz-activity-tag').value.trim();
     if (!confirm(`ยืนยันการแจกแต้มสำหรับกิจกรรม "${activityTag}" ?\n(เฉพาะคนที่ยังไม่เคยได้รับ)`)) return;
 
+    let quizContributors = {};
+
     const batch = writeBatch(db);
     const timestamp = serverTimestamp();
     let count = 0;
@@ -7826,6 +7739,9 @@ window.confirmQuizDistribution = async () => {
                 if (finalPoints > d.baseScore) {
                      logReason += ` + Boosted 🚀`;
                 }
+                if (finalPoints > 0) {
+                    quizContributors[s.id] = finalPoints;
+                }
 
                 batch.set(hRef, {
                     student_id: s.id,
@@ -7844,6 +7760,9 @@ window.confirmQuizDistribution = async () => {
     if (count > 0) {
         try {
             await batch.commit();
+            if (Object.keys(quizContributors).length > 0) {
+                await autoDamageBoss(quizContributors);
+            }
             showToast(`✅ แจกแต้มสำเร็จ ${count} คน`);
             if(window.soundCoin) window.soundCoin.play();
             document.getElementById('quiz-modal').classList.add('hidden');
@@ -7853,353 +7772,6 @@ window.confirmQuizDistribution = async () => {
         }
     } else {
         alert('ไม่มีรายชื่อใหม่ที่ต้องแจกแต้ม');
-    }
-};
-
-// ================= 👥 CUSTOM GROUPS LOGIC (ฉบับแก้ไข Path) =================
-
-let customGroups = [];
-let currentGroupMembers = new Set();
-let targetGroupId = null;
-
-// 1. โหลดข้อมูลกลุ่ม (แก้ Path ให้มี 6 ท่อน)
-try {
-    // 🔥 แก้ไขตรงนี้: เพิ่ม 'core' ต่อท้าย เพื่อให้อ้างอิงถึงไฟล์ ไม่ใช่โฟลเดอร์
-    const groupsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'custom_groups', 'core');
-    
-    onSnapshot(groupsDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-            customGroups = docSnap.data().list || [];
-        } else {
-            customGroups = [];
-        }
-        // ถ้าเปิดหน้ากลุ่มอยู่ ให้วาดใหม่ทันที
-        const groupsTab = document.getElementById('content-groups');
-        if (groupsTab && !groupsTab.classList.contains('hidden')) {
-            renderCustomGroups();
-        }
-    });
-} catch(e) {
-    console.error("Error init groups listener:", e);
-}
-
-// 2. ฟังก์ชันแสดงรายชื่อกลุ่ม
-window.renderCustomGroups = () => {
-    const container = document.getElementById('custom-groups-list');
-    if (!container) return;
-
-    if (customGroups.length === 0) {
-        container.innerHTML = `
-            <div class="col-span-full text-center py-20 text-gray-400 border-2 border-dashed border-gray-200 rounded-2xl">
-                <div class="text-6xl mb-4 opacity-50">👥</div>
-                <p class="text-xl font-bold">ยังไม่มีกลุ่ม</p>
-                <p class="text-sm">สร้างกลุ่มใหม่เพื่อเริ่มใช้งาน</p>
-            </div>`;
-        return;
-    }
-
-    container.innerHTML = customGroups.map(g => {
-        const memberCount = g.student_ids ? g.student_ids.length : 0;
-        const bgColors = ['bg-pink-50', 'bg-purple-50', 'bg-indigo-50', 'bg-blue-50', 'bg-teal-50', 'bg-orange-50'];
-        const colorClass = bgColors[(g.name.length || 0) % bgColors.length];
-
-        return `
-        <div class="relative group p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all ${colorClass}">
-            <div class="flex justify-between items-start mb-3">
-                <div class="w-14 h-14 bg-white rounded-full flex items-center justify-center text-3xl shadow-sm border border-gray-100">
-                    ${g.icon || '👥'}
-                </div>
-                <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onclick="openManageGroupModal('${g.id}')" class="p-1.5 bg-white text-gray-500 hover:text-indigo-600 rounded-lg border hover:border-indigo-200 shadow-sm" title="แก้ไข">✏️</button>
-                    <button onclick="deleteCustomGroup('${g.id}')" class="p-1.5 bg-white text-gray-500 hover:text-red-500 rounded-lg border hover:border-red-200 shadow-sm" title="ลบ">🗑️</button>
-                </div>
-            </div>
-            
-            <h3 class="text-lg font-bold text-gray-800 mb-1 truncate">${g.name}</h3>
-            <p class="text-sm text-gray-500 mb-4">${memberCount} สมาชิก</p>
-            
-            <button onclick="openGroupPointModal('${g.id}')" class="w-full bg-white border-2 border-indigo-100 hover:border-indigo-500 hover:text-indigo-700 text-gray-600 py-2 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
-                <span>🎁</span> แจกแต้มกลุ่ม
-            </button>
-        </div>
-        `;
-    }).join('');
-};
-
-// 3. ฟังก์ชันเปิด Modal
-window.openManageGroupModal = (groupId = null) => {
-    const modal = document.getElementById('manage-group-modal');
-    if(!modal) return console.error('Modal not found');
-
-    const title = document.getElementById('manage-group-title');
-    const idInput = document.getElementById('group-id-input');
-    const nameInput = document.getElementById('group-name-input');
-    const iconInput = document.getElementById('group-icon-input');
-
-    currentGroupMembers.clear();
-
-    if (groupId) {
-        const g = customGroups.find(x => x.id === groupId);
-        if (!g) return;
-        title.textContent = 'แก้ไขกลุ่ม';
-        idInput.value = g.id;
-        nameInput.value = g.name;
-        iconInput.value = g.icon;
-        if (g.student_ids) g.student_ids.forEach(id => currentGroupMembers.add(id));
-    } else {
-        title.textContent = 'สร้างกลุ่มใหม่';
-        idInput.value = '';
-        nameInput.value = '';
-        iconInput.value = '👥';
-    }
-
-    renderGroupMemberSelector();
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-};
-
-// 4. ฟังก์ชันเลือกสมาชิก (อัปเดตล่าสุด: เรียงคนเลือกไว้บน + ค้นชั้นเรียน)
-window.renderGroupMemberSelector = () => {
-    const list = document.getElementById('group-member-list');
-    const searchInput = document.getElementById('group-member-search');
-    if(!list) return;
-
-    const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
-    
-    let filtered = students.filter(s => 
-        s.full_name.toLowerCase().includes(search) || 
-        s.student_id.includes(search) ||
-        (s.class_name && s.class_name.toLowerCase().includes(search))
-    );
-
-    filtered.sort((a, b) => {
-        const aSelected = currentGroupMembers.has(a.id);
-        const bSelected = currentGroupMembers.has(b.id);
-        if (aSelected && !bSelected) return -1;
-        if (!aSelected && bSelected) return 1;
-        return a.student_id.localeCompare(b.student_id);
-    });
-
-    list.innerHTML = filtered.map(s => {
-        const isChecked = currentGroupMembers.has(s.id);
-        const classTag = s.class_name ? `<span class="ml-1 text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200">${s.class_name}</span>` : '';
-        
-        return `
-        <div onclick="toggleGroupMember('${s.id}')" class="cursor-pointer p-2 rounded border flex items-center gap-2 transition-all ${isChecked ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-200' : 'bg-white border-gray-200 hover:bg-gray-50'}">
-            <div class="w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-300'}">
-                ${isChecked ? '✓' : ''}
-            </div>
-            <div class="text-sm truncate select-none flex-1">
-                <div class="font-bold text-gray-800 flex items-center">
-                    ${s.full_name} ${classTag}
-                </div>
-                <div class="text-[10px] text-gray-400">เลขประจำตัว: ${s.student_id}</div>
-            </div>
-            ${isChecked ? '<span class="text-[10px] font-bold text-indigo-500 shrink-0">เลือกแล้ว</span>' : ''}
-        </div>`;
-    }).join('');
-};
-
-window.toggleGroupMember = (sid) => {
-    if (currentGroupMembers.has(sid)) currentGroupMembers.delete(sid);
-    else currentGroupMembers.add(sid);
-    renderGroupMemberSelector();
-};
-
-// 5. บันทึกกลุ่ม (แก้ Path ให้ตรงกัน)
-window.saveCustomGroup = async () => {
-    const id = document.getElementById('group-id-input').value;
-    const name = document.getElementById('group-name-input').value.trim();
-    const icon = document.getElementById('group-icon-input').value.trim();
-
-    if (!name) return alert('กรุณาใส่ชื่อกลุ่ม');
-    if (currentGroupMembers.size === 0) return alert('กรุณาเลือกสมาชิกอย่างน้อย 1 คน');
-
-    const newGroup = {
-        id: id || crypto.randomUUID(),
-        name,
-        icon,
-        student_ids: Array.from(currentGroupMembers)
-    };
-
-    let newList = [...customGroups];
-    if (id) {
-        const idx = newList.findIndex(x => x.id === id);
-        if (idx !== -1) newList[idx] = newGroup;
-    } else {
-        newList.push(newGroup);
-    }
-
-    try {
-        // 🔥 แก้ไข Path ให้มี 'core' ต่อท้าย
-        const groupsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'custom_groups', 'core');
-        await setDoc(groupsDocRef, { list: newList });
-        document.getElementById('manage-group-modal').classList.add('hidden');
-        showToast('บันทึกกลุ่มเรียบร้อย ✅');
-    } catch (e) {
-        console.error(e);
-        alert('เกิดข้อผิดพลาด: ' + e.message);
-    }
-};
-
-// 6. ลบกลุ่ม (แก้ Path ให้ตรงกัน)
-window.deleteCustomGroup = async (gid) => {
-    if (!confirm('ยืนยันที่จะลบกลุ่มนี้? (ข้อมูลนักเรียนไม่หาย)')) return;
-    const newList = customGroups.filter(x => x.id !== gid);
-    try {
-        // 🔥 แก้ไข Path ให้มี 'core' ต่อท้าย
-        const groupsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'custom_groups', 'core');
-        await setDoc(groupsDocRef, { list: newList });
-        showToast('ลบกลุ่มแล้ว 🗑️');
-    } catch (e) {
-        alert('Error: ' + e.message);
-    }
-};
-
-// --- ส่วนแจกแต้มกลุ่ม ---
-window.openGroupPointModal = (gid) => {
-    targetGroupId = gid;
-    const g = customGroups.find(x => x.id === gid);
-    if (!g) return;
-
-    document.getElementById('gp-modal-icon').textContent = g.icon;
-    document.getElementById('gp-modal-name').textContent = `แจกแต้มกลุ่ม: ${g.name}`;
-    document.getElementById('gp-modal-count').textContent = `สมาชิก ${g.student_ids.length} คน`;
-
-    const listContainer = document.getElementById('gp-member-list');
-    if (listContainer) {
-        // ซ่อนไว้ก่อนเสมอเมื่อเปิดใหม่ (หรือจะให้โชว์เลยก็ได้ ให้ลบ class hidden ออกจาก HTML แทน)
-        listContainer.classList.add('hidden'); 
-        
-        if (g.student_ids.length > 0) {
-            // แปลง ID เป็น ชื่อนักเรียน
-            const memberNames = g.student_ids.map(sid => {
-                const s = students.find(std => std.id === sid);
-                return s ? `<span class="bg-white px-2 py-1 rounded border text-xs text-gray-600">${s.full_name}</span>` : null;
-            }).filter(n => n).join(''); // กรอง null ออกแล้วต่อ String
-            
-            listContainer.innerHTML = `<div class="flex flex-wrap gap-2 justify-center">${memberNames}</div>`;
-        } else {
-            listContainer.innerHTML = '<div class="text-center text-gray-400 text-xs">- ไม่มีสมาชิก -</div>';
-        }
-    }
-    document.getElementById('gp-amount').value = 10;
-    document.getElementById('gp-reason').value = '';
-    
-    const select = document.getElementById('gp-mission-select');
-    select.innerHTML = '<option value="">-- เลือกภารกิจ --</option>' + 
-        quests.map(q => `<option value="${q.id}">[${q.category||'ทั่วไป'}] ${q.title} (+${q.points})</option>`).join('');
-
-    switchGroupPointTab('custom');
-    document.getElementById('group-point-modal').classList.remove('hidden');
-};
-
-window.switchGroupPointTab = (tab) => {
-    const tCustom = document.getElementById('gp-tab-custom');
-    const tMission = document.getElementById('gp-tab-mission');
-    const cCustom = document.getElementById('gp-content-custom');
-    const cMission = document.getElementById('gp-content-mission');
-
-    if (tab === 'custom') {
-        tCustom.classList.replace('border-transparent', 'border-indigo-600');
-        tCustom.classList.replace('text-gray-500', 'text-indigo-600');
-        tMission.classList.replace('border-indigo-600', 'border-transparent');
-        tMission.classList.replace('text-indigo-600', 'text-gray-500');
-        cCustom.classList.remove('hidden');
-        cMission.classList.add('hidden');
-    } else {
-        tMission.classList.replace('border-transparent', 'border-indigo-600');
-        tMission.classList.replace('text-gray-500', 'text-indigo-600');
-        tCustom.classList.replace('border-indigo-600', 'border-transparent');
-        tCustom.classList.replace('text-indigo-600', 'text-gray-500');
-        cMission.classList.remove('hidden');
-        cCustom.classList.add('hidden');
-    }
-};
-
-window.onGroupMissionSelect = () => {
-    const mid = document.getElementById('gp-mission-select').value;
-    const preview = document.getElementById('gp-mission-preview');
-    if (!mid) {
-        preview.classList.add('hidden');
-        return;
-    }
-    const q = quests.find(x => x.id === mid);
-    if (q) {
-        document.getElementById('gp-mp-icon').textContent = q.icon;
-        document.getElementById('gp-mp-title').textContent = q.title;
-        document.getElementById('gp-mp-points').textContent = `+${q.points} แต้ม`;
-        preview.classList.remove('hidden');
-    }
-};
-
-window.confirmGroupPoints = async () => {
-    const g = customGroups.find(x => x.id === targetGroupId);
-    if (!g || !g.student_ids || g.student_ids.length === 0) return alert('กลุ่มนี้ไม่มีสมาชิก');
-
-    let amount = 0;
-    let reason = '';
-    const isMission = !document.getElementById('gp-content-mission').classList.contains('hidden');
-
-    if (isMission) {
-        const mid = document.getElementById('gp-mission-select').value;
-        if (!mid) return alert('กรุณาเลือกภารกิจ');
-        const q = quests.find(x => x.id === mid);
-        amount = parseInt(q.points);
-        reason = `ภารกิจกลุ่ม: ${q.title}`;
-    } else {
-        amount = parseInt(document.getElementById('gp-amount').value);
-        reason = document.getElementById('gp-reason').value.trim() || 'รางวัลกลุ่ม';
-    }
-
-    if (isNaN(amount) || amount <= 0) return alert('จำนวนแต้มต้องมากกว่า 0');
-    if (!confirm(`ยืนยันแจกแต้ม ${amount} คะแนน ให้สมาชิกกลุ่ม "${g.name}" ทั้ง ${g.student_ids.length} คน?`)) return;
-
-    const batch = writeBatch(db);
-    const timestamp = serverTimestamp();
-    let count = 0;
-
-    g.student_ids.forEach(sid => {
-        const s = students.find(x => x.id === sid);
-        if (s) {
-            // เรียกฟังก์ชันคำนวณบัฟที่มีอยู่แล้ว
-            const finalPoints = typeof calculateBuffedPoints === 'function' ? calculateBuffedPoints(s, amount) : amount;
-            
-            const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
-            const hRef = doc(db, 'artifacts', appId, 'public', 'data', 'history', crypto.randomUUID());
-
-            if ((s.warning_cards || 0) > 0) {
-                batch.update(sRef, { pending_points: increment(finalPoints) });
-            } else {
-                batch.update(sRef, { points: increment(finalPoints) });
-            }
-            
-           
-
-            let logReason = reason;
-            if (finalPoints > amount) logReason += ` + Boosted 🚀`;
-
-            batch.set(hRef, {
-                student_id: s.id,
-                student_name: s.full_name,
-                action: `รางวัลกลุ่ม (${g.name})`,
-                amount: finalPoints,
-                type: 'add_points',
-                timestamp: timestamp,
-                reason: logReason
-            });
-            count++;
-        }
-    });
-
-    try {
-        await batch.commit();
-        document.getElementById('group-point-modal').classList.add('hidden');
-        showToast(`✅ แจกแต้มกลุ่มสำเร็จ (${count} คน)`);
-        if (window.soundCoin) window.soundCoin.play();
-    } catch (e) {
-        console.error(e);
-        alert('Error: ' + e.message);
     }
 };
 
@@ -8273,7 +7845,6 @@ window.setStudentBankAmount = (val) => {
     }
 };
 
-// 3. ยืนยันทำรายการ
 // ==========================================================
 // 🏦 STUDENT BANK SYSTEM (ระบบธนาคารฝั่งนักเรียน - ฉบับปรับปรุง)
 // ==========================================================
@@ -8859,8 +8430,8 @@ async function updateStockPriceDynamic(stockId, qty, actionType) {
 
     // 🔥 LOGIC สำคัญ: ถ้ายังสะสมไม่ครบ 5 ครั้ง ให้จบฟังก์ชันเลย (ไม่ยิง Database)
     // คุณสามารถแก้เลข 5 เป็น 10 ได้ถ้าอยากประหยัดสุดๆ
-    if (tradeCounter[stockId] < 5) {
-        console.log(`⏳ สะสมยอดเทรดหุ้น ${stockId}: ${tradeCounter[stockId]}/5 (ยังไม่อัปเดตราคา)`);
+    if (tradeCounter[stockId] < 3) {
+        console.log(`⏳ สะสมยอดเทรดหุ้น ${stockId}: ${tradeCounter[stockId]}/3 (ยังไม่อัปเดตราคา)`);
         return; 
     }
 
@@ -8878,9 +8449,9 @@ async function updateStockPriceDynamic(stockId, qty, actionType) {
             const currentPrice = parseFloat(data.price);
             let newPrice = currentPrice;
 
-            // คำนวณราคา (คูณ 5 เพราะเราอั้นมา 5 รอบ ถึงปล่อยทีนึง)
+            // คำนวณราคา (คูณ 3 เพราะเราอั้นมา 3 รอบ ถึงปล่อยทีนึง)
             // หรือจะคำนวณแบบปกติก็ได้ แต่ราคาจะขยับทีละนิด
-            const batchMultiplier = 5; 
+            const batchMultiplier = 3; 
             const changePercent = (qty * MARKET_SENSITIVITY) * batchMultiplier; // คูณแรงขึ้นชดเชยรอบที่หายไป
 
             if (actionType === 'buy') {
@@ -11010,6 +10581,996 @@ window.useGuildItem = async (itemUuid) => {
         showLoading(false);
         Swal.fire('Error', e.message, 'error');
     }
+};
+
+// ==========================================
+// 👹 BOSS SYSTEM (ระบบบอส)
+// ==========================================
+let bossListener = null;
+let currentBossData = null;
+let bossTimerInterval = null;
+
+window.initBossSystem = () => {
+    if (bossListener) return;
+    
+    const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+    
+    bossListener = onSnapshot(bossRef, (docSnap) => {
+        // ID Elements ต่างๆ ในหน้า Tab ใหม่
+        const createForm = document.getElementById('create-boss-form');
+        const activeControls = document.getElementById('active-boss-controls');
+        const bossWidget = document.getElementById('boss-widget-container'); // ของเด็ก
+
+        if (docSnap.exists() && docSnap.data().active) {
+            currentBossData = docSnap.data();
+
+            // ==========================================
+            // 💥💥💥 ระบบแอนิเมชันตอนบอสโดนดาเมจ 💥💥💥
+            // ==========================================
+            if (typeof window.previousBossHp !== 'undefined' && window.previousBossHp !== null) {
+                const currentHp = currentBossData.current_hp;
+                
+                // ถ้าเลือดลดลง (และบอสยังไม่ตาย เพราะตอนตายมีปุ่มให้กดแล้ว)
+                if (currentHp < window.previousBossHp && currentHp > 0) {
+                    const damageTaken = window.previousBossHp - currentHp;
+                    
+                    // เด้ง Popup มุมขวาบน (Toast) เพื่อไม่ให้รบกวนการคลิกของครู
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        imageUrl: 'https://cdn-icons-png.flaticon.com/512/11582/11582155.png', // รูปเอฟเฟกต์การโจมตี
+                        imageWidth: 40,
+                        title: 'BOOM!',
+                        text: `บอสโดนโจมตี -${damageTaken.toLocaleString()} HP`,
+                        showConfirmButton: false,
+                        timer: 2500,
+                        timerProgressBar: true,
+                        background: '#1f2937', // พื้นหลังสีเทาเข้มดูดุดัน
+                        color: '#f87171', // ตัวหนังสือสีแดง
+                    });
+                }
+            }
+            // อัปเดตเลือดล่าสุดเก็บไว้เทียบในรอบถัดไป
+            window.previousBossHp = currentBossData.current_hp;
+            
+            // 1. สลับหน้าจอ: ซ่อนฟอร์ม -> โชว์แผงควบคุม
+            if(createForm) createForm.classList.add('hidden');
+            if(activeControls) activeControls.classList.remove('hidden');
+
+            // 2. อัปเดตข้อมูลบนหน้า Admin
+            setText('admin-boss-name', currentBossData.name);
+            setText('admin-boss-hp-text', `${currentBossData.current_hp.toLocaleString()} / ${currentBossData.max_hp.toLocaleString()}`);
+            setText('admin-boss-ratio-show', currentBossData.damage_ratio || 1);
+            
+            // Update HP Bar
+            const percent = Math.max(0, (currentBossData.current_hp / currentBossData.max_hp) * 100);
+            const bar = document.getElementById('admin-boss-hp-bar');
+            if(bar) bar.style.width = `${percent}%`;
+
+            // Update Image
+            const img = document.getElementById('admin-boss-img-preview');
+            if(img) img.src = currentBossData.image || 'https://cdn-icons-png.flaticon.com/512/3062/3062634.png';
+
+            // ==========================================
+            // 🔥🔥🔥 ส่วนที่เพิ่มใหม่: โชว์ของรางวัลและบทลงโทษ 🔥🔥🔥
+            // ==========================================
+            // แสดงแต้มชนะ / แพ้
+            setText('admin-boss-reward-show', currentBossData.win_reward || currentBossData.reward || 0);
+            setText('admin-boss-penalty-show', currentBossData.penalty || currentBossData.lose_penalty || 0);
+
+            // จัดการแสดงชื่อไอเทมดรอป (รองรับทั้งแบบ ID และแบบ Object)
+            let dropName = "ไม่มี";
+            if (currentBossData.drop_item) {
+                if (typeof currentBossData.drop_item === 'string') {
+                    const foundItem = (window.rewards || []).find(r => r.id === currentBossData.drop_item);
+                    dropName = foundItem ? foundItem.name : "ไอเทมลึกลับ";
+                } else if (typeof currentBossData.drop_item === 'object') {
+                    dropName = currentBossData.drop_item.name || "ไอเทมลึกลับ";
+                }
+            }
+            setText('admin-boss-drop-show', dropName);
+            // ==========================================
+
+            // 3. อัปเดตตารางคนตีบอส (Contributors)
+            if (typeof renderBossContributors === 'function') {
+                renderBossContributors(currentBossData.contributors);
+            }
+
+            // 4. อัปเดตหน้าเด็ก (ถ้ามี)
+            if(bossWidget) {
+                bossWidget.classList.remove('hidden');
+                if (typeof renderBossWidget === 'function') {
+                    renderBossWidget(currentBossData);
+                }
+            }
+            
+            if (typeof startBossTimer === 'function') startBossTimer(); 
+            if (typeof loadManualAttackers === 'function') loadManualAttackers();
+
+            // ==========================================
+            // 🔥🔥🔥 ตรวจจับเมื่อบอสเลือดหมด (สลับ UI ให้ครูกดปุ่ม) 🔥🔥🔥
+            // ==========================================
+            if (currentBossData.current_hp <= 0) {
+                // 1. หยุดเวลา
+                if (window.bossTimerInterval) clearInterval(window.bossTimerInterval);
+
+                // 2. สลับหน้าจอ: ปิดปุ่มตี -> โชว์ปุ่มแจกรางวัล
+                const aliveUI = document.getElementById('boss-alive-controls');
+                const deadUI = document.getElementById('boss-dead-controls');
+                if(aliveUI) aliveUI.classList.add('hidden');
+                if(deadUI) deadUI.classList.remove('hidden');
+
+                // 3. แจ้งเตือนนักเรียน (โชว์ครั้งเดียว)
+                if (window.userRole === 'student' && !window.isBossDefeatedAlertShown) {
+                    window.isBossDefeatedAlertShown = true;
+                    Swal.fire({
+                        title: 'Victory! ⚔️',
+                        text: 'บอสถูกกำจัดแล้ว! รอคุณครูกดแจกรางวัลนะ',
+                        icon: 'success',
+                        timer: 4000
+                    });
+                }
+            } else {
+                // กรณีเลือดบอสยังมากกว่า 0 (หรือโดนฮีลกลับมา)
+                const aliveUI = document.getElementById('boss-alive-controls');
+                const deadUI = document.getElementById('boss-dead-controls');
+                if(aliveUI) aliveUI.classList.remove('hidden');
+                if(deadUI) deadUI.classList.add('hidden');
+                
+                window.isBossDefeatedAlertShown = false;
+            }
+            // ==========================================
+
+        } else {
+            // กรณีไม่มีบอส
+            currentBossData = null;
+            if(createForm) createForm.classList.remove('hidden');
+            if(activeControls) activeControls.classList.add('hidden');
+            if(bossWidget) bossWidget.classList.add('hidden');
+            
+            if (window.bossTimerInterval) clearInterval(window.bossTimerInterval);
+            window.isBossDefeatedAlertShown = false; // เคลียร์สถานะตอนบอสถูกลบ
+            window.previousBossHp = null;
+        }
+    });
+};
+
+// ==========================================
+// 📋 ฟังก์ชันโหลดรายชื่อนักเรียน (เรียง selected ไว้บน)
+// ==========================================
+window.loadManualAttackers = () => {
+    const container = document.getElementById('manual-attacker-list');
+    const countDisplay = document.getElementById('manual-selected-count');
+    
+    if (!container) return;
+
+    // 🔥 1. ตั้งค่า Container ให้เป็น Flex Column เพื่อให้ใช้ property 'order' ได้
+    container.className = "h-48 overflow-y-auto p-1 space-y-1 bg-white flex flex-col";
+
+    // ดึงข้อมูล (Global หรือ Local)
+    let data = [];
+    if (typeof window.students !== 'undefined' && window.students.length > 0) {
+        data = window.students;
+    } else if (typeof students !== 'undefined' && students.length > 0) {
+        data = students;
+    }
+
+    if (data.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-400 text-xs py-4">ไม่พบข้อมูลนักเรียน</p>';
+        return;
+    }
+
+    // เรียงตามเลขที่
+    const sortedStudents = [...data].sort((a, b) => 
+        (a.student_id || '').localeCompare(b.student_id || '')
+    );
+
+    let html = '';
+    sortedStudents.forEach(s => {
+        const avatar = s.profile_image || 'https://cdn-icons-png.flaticon.com/512/847/847969.png';
+        
+        // สังเกต style="order: 0" คือลำดับปกติ
+        html += `
+            <label class="manual-student-item flex items-center gap-3 p-2 hover:bg-indigo-50 rounded-lg cursor-pointer border border-transparent hover:border-indigo-100 transition-all select-none border-b border-gray-100 last:border-0" style="order: 0">
+                <input type="checkbox" value="${s.id}" class="manual-attacker-checkbox w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 flex-shrink-0" onchange="updateManualCount()">
+                
+                <div class="flex items-center gap-3 w-full overflow-hidden">
+                    <img src="${avatar}" class="w-8 h-8 rounded-full object-cover bg-gray-200 flex-shrink-0">
+                    <div class="flex flex-col leading-tight min-w-0">
+                        <span class="text-xs font-bold text-gray-500 truncate">${s.student_id || 'ไม่ระบุ'}</span>
+                        <span class="text-sm font-medium text-gray-800 truncate student-name">${s.full_name}</span>
+                    </div>
+                </div>
+            </label>
+        `;
+    });
+
+    container.innerHTML = html;
+    if(countDisplay) countDisplay.textContent = '0';
+};
+
+// 👇 ฟังก์ชันช่วย: กรองรายชื่อ (Search)
+window.filterManualAttackers = () => {
+    const input = document.getElementById('manual-search-input');
+    const filter = input.value.toLowerCase();
+    const items = document.querySelectorAll('.manual-student-item');
+
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        if (text.includes(filter)) {
+            item.classList.remove('hidden');
+        } else {
+            item.classList.add('hidden');
+        }
+    });
+};
+
+// 👇 ฟังก์ชันช่วย: เลือกทั้งหมด / ล้าง
+window.toggleSelectAllManual = (selectAll) => {
+    const checkboxes = document.querySelectorAll('.manual-attacker-checkbox');
+    // เลือกเฉพาะตัวที่มองเห็นอยู่ (เผื่อกรองค้นหาอยู่)
+    checkboxes.forEach(cb => {
+        if (!cb.closest('.manual-student-item').classList.contains('hidden')) {
+            cb.checked = selectAll;
+        }
+    });
+    updateManualCount();
+};
+
+// ==========================================
+// 🔄 ฟังก์ชันอัปเดตจำนวน + ย้ายคนที่เลือกไปไว้บนสุด
+// ==========================================
+window.updateManualCount = () => {
+    const checkboxes = document.querySelectorAll('.manual-attacker-checkbox');
+    let count = 0;
+
+    checkboxes.forEach(cb => {
+        // หาตัว Parent (label) ของ checkbox นี้
+        const parentRow = cb.closest('.manual-student-item');
+        
+        if (cb.checked) {
+            count++;
+            // 🔥 เทคนิคเด็ด: ย้ายไปบนสุดด้วย order: -1
+            parentRow.style.order = "-1"; 
+            
+            // เปลี่ยนสีให้รู้ว่าเลือกแล้ว
+            parentRow.classList.add('bg-indigo-50', 'border-indigo-200');
+            parentRow.classList.remove('border-transparent');
+        } else {
+            // คืนค่าเดิม (order: 0)
+            parentRow.style.order = "0"; 
+            
+            // คืนสีเดิม
+            parentRow.classList.remove('bg-indigo-50', 'border-indigo-200');
+            parentRow.classList.add('border-transparent');
+        }
+    });
+
+    const display = document.getElementById('manual-selected-count');
+    if(display) display.textContent = count;
+};
+
+// 👇 ฟังก์ชันช่วยแสดงรายชื่อคนตี (Helper Function)
+function renderBossContributors(contributors) {
+    const listEl = document.getElementById('boss-contributors-list');
+    if(!listEl) return;
+
+    if (!contributors || Object.keys(contributors).length === 0) {
+        listEl.innerHTML = '<p class="text-center text-gray-400 py-10 text-sm">ยังไม่มีดาเมจ</p>';
+        return;
+    }
+
+    // แปลง Map เป็น Array -> เรียงตามดาเมจมากไปน้อย
+    const sorted = Object.entries(contributors)
+        .map(([id, dmg]) => ({ id, dmg }))
+        .sort((a, b) => b.dmg - a.dmg);
+
+    listEl.innerHTML = sorted.map((c, i) => {
+        // หาชื่อนักเรียนจาก Array students (ถ้าโหลดไว้แล้ว)
+        const student = students.find(s => s.id === c.id);
+        const name = student ? student.full_name : 'Unknown Student';
+        const rankColor = i === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-50 text-gray-600';
+        
+        return `
+            <div class="flex justify-between items-center p-2 rounded-lg ${rankColor} text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold w-5 text-center">${i+1}</span>
+                    <span class="truncate max-w-[120px] font-medium">${name}</span>
+                </div>
+                <span class="font-bold">⚔️ ${c.dmg.toLocaleString()}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// Helper เล็กๆ สำหรับเปลี่ยน text
+function setText(id, text) {
+    const el = document.getElementById(id);
+    if(el) el.textContent = text;
+}
+// 2. แสดงผล Widget
+function renderBossWidget(data) {
+    document.getElementById('boss-name-show').textContent = data.name;
+    document.getElementById('boss-reward-show').textContent = data.reward;
+    document.getElementById('boss-penalty-show').textContent = data.penalty;
+    
+    // รูปภาพ (ถ้าไม่มีรูป ใช้รูป Default)
+    const defaultBossImg = 'https://cdn-icons-png.flaticon.com/512/3062/3062634.png';
+    document.getElementById('boss-image-show').src = data.image || defaultBossImg;
+
+    // HP Bar
+    const hpPercent = Math.max(0, (data.current_hp / data.max_hp) * 100);
+    document.getElementById('boss-hp-bar').style.width = `${hpPercent}%`;
+    document.getElementById('boss-hp-text').textContent = `${data.current_hp.toLocaleString()} / ${data.max_hp.toLocaleString()}`;
+    
+    // เปลี่ยนสี HP Bar ตามความวิกฤต
+    const bar = document.getElementById('boss-hp-bar');
+    if(hpPercent < 30) bar.className = "h-full bg-red-600 animate-pulse";
+    else bar.className = "h-full bg-gradient-to-r from-red-600 via-orange-500 to-red-600";
+}
+
+// ==========================================
+// ⏱️ ฟังก์ชันนับถอยหลังเวลาบอส (Timer)
+// ==========================================
+window.startBossTimer = () => {
+    // เคลียร์ Interval เก่าก่อนเริ่มใหม่เสมอ (กันตัวเลขนับซ้อนกัน)
+    if (window.bossTimerInterval) clearInterval(window.bossTimerInterval);
+
+    const updateTimer = () => {
+        // ถ้าไม่มีข้อมูลบอส หรือ ไม่มีเวลาจบ ให้หยุด
+        if (!currentBossData || !currentBossData.end_time) return;
+
+        // แปลงเวลาจาก Firestore Timestamp เป็น Date Object
+        // (Firestore เก็บเวลาเป็น Timestamp ต้องแปลงด้วย .toDate() ก่อน)
+        const endTime = currentBossData.end_time.toDate ? currentBossData.end_time.toDate() : new Date(currentBossData.end_time);
+        const now = new Date();
+        const diff = endTime - now; // ผลต่างเวลา (Milliseconds)
+
+        // กรณีหมดเวลา (Time's up)
+        if (diff <= 0) {
+            clearInterval(window.bossTimerInterval);
+            
+            // เซ็ตเลขเป็น 00:00:00
+            updateTimerUI("00:00:00");
+            
+            // 🔥 เพิ่มเติม: ถ้าบอสยัง Active อยู่แต่เวลาหมด = แพ้ (DEFEAT)
+            // (คุณอาจจะเพิ่ม logic เรียก checkBossResult('lose') ตรงนี้ถ้าต้องการให้จบอัตโนมัติ)
+            return;
+        }
+
+        // คำนวณ ชม:นาที:วินาที
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        // จัด Format ให้มีเลข 0 นำหน้า (เช่น 01:05:09)
+        const timeString = 
+            `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+        // อัปเดตตัวเลขบนหน้าจอ
+        updateTimerUI(timeString);
+    };
+
+    // Helper: ฟังก์ชันอัปเดต Text ใน Element ต่างๆ
+    const updateTimerUI = (text) => {
+        // 1. หน้า Admin (Command Center)
+        const adminTimer = document.getElementById('admin-boss-timer');
+        if (adminTimer) adminTimer.textContent = text;
+        
+        // 2. หน้านักเรียน (Widget) - เผื่อไว้
+        const studentTimer = document.getElementById('boss-timer-display');
+        if (studentTimer) studentTimer.textContent = text;
+        
+        // 3. หน้า Modal เดิม (เผื่อยังใช้อยู่)
+        const modalTimer = document.getElementById('boss-timer');
+        if (modalTimer) modalTimer.textContent = text;
+    };
+
+    // รันครั้งแรกทันทีไม่ต้องรอ 1 วินาที
+    updateTimer();
+    
+    // ตั้ง Loop รันทุกๆ 1 วินาที
+    window.bossTimerInterval = setInterval(updateTimer, 1000);
+};
+
+// ==========================================
+// 🛠️ ADMIN FUNCTIONS
+// ==========================================
+
+window.openBossManagerModal = () => {
+    loadBossDropOptions();
+    document.getElementById('boss-manager-modal').classList.remove('hidden');
+};
+
+// 1. สร้างบอส
+window.createBoss = async () => {
+    const name = document.getElementById('boss-name').value;
+    const hp = parseInt(document.getElementById('boss-hp').value);
+    const durationVal = parseInt(document.getElementById('boss-duration-val').value) || 1;
+    const unit = document.getElementById('boss-duration-unit').value;
+    const reward = parseInt(document.getElementById('boss-reward').value);
+    const penalty = parseInt(document.getElementById('boss-penalty').value);
+    const img = document.getElementById('boss-img').value;
+    const ratio = parseInt(document.getElementById('boss-ratio').value) || 1; // รับค่า Ratio
+
+    let multiplier = 1000 * 60; // Default: นาที (ms * 60)
+
+    if (unit === 'hour') {
+        multiplier = 1000 * 60 * 60; // ชั่วโมง
+    } else if (unit === 'day') {
+        multiplier = 1000 * 60 * 60 * 24; // วัน
+    }
+
+    const totalDurationMs = durationVal * multiplier;
+    const endTime = new Date(Date.now() + totalDurationMs);
+
+    if (!name || !hp || !durationVal) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อ, HP และเวลา', 'warning');
+
+    // 🔥 รับค่าไอเทมดรอป
+    const dropItemSelect = document.getElementById('boss-drop-item');
+    let dropItemData = null;
+    
+    if (dropItemSelect && dropItemSelect.value) {
+        try {
+            dropItemData = JSON.parse(dropItemSelect.value);
+        } catch (e) { console.error(e); }
+    }
+
+    try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss'), {
+            name,
+            max_hp: hp,
+            current_hp: hp,
+            end_time: endTime,
+            reward,
+            penalty,
+            image: img,
+            damage_ratio: ratio, // 🔥 บันทึก Ratio ลง DB
+            end_time: endTime,
+            drop_item: dropItemData, // 💾 บันทึกข้อมูลไอเทมลง DB
+            active: true,
+            created_at: serverTimestamp()
+        });
+        Swal.fire('Summoned!', 'บอสปรากฏตัวแล้ว!', 'success');
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', e.message, 'error');
+    }
+};
+
+// ฟังก์ชันโจมตีบอส (ปรับปรุงใหม่)
+window.adjustBossHP = async (pointsUsed) => {
+    if (!currentBossData) return;
+    
+    const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+    const ratio = currentBossData.damage_ratio || 1; // ดึงค่า Ratio (Default 1)
+
+    // คำนวณ Damage จริง
+    // ถ้า pointsUsed เป็นลบ (โจมตี) -> หารด้วย ratio
+    // ถ้า pointsUsed เป็นบวก (ฮีล) -> ไม่ต้องหาร (หรือหารก็ได้แล้วแต่กติกา)
+    
+    let damage = 0;
+    if (pointsUsed < 0) {
+        // โจมตี: เอาแต้มที่ใช้ หารด้วย Ratio
+        damage = Math.floor(pointsUsed / ratio); 
+    } else {
+        // ฮีล: ฮีลตามจำนวนหน่วยตรงๆ (หรือจะใช้สูตรอื่นก็ได้)
+        damage = pointsUsed; 
+    }
+
+    // กันเหนียว: ถ้า Damage เป็น 0 (เช่นใช้น้อยกว่า Ratio) ให้ปัดเป็น -1 (ตบเบาๆ ก็เจ็บนิดนึง)
+    if (pointsUsed < 0 && damage === 0) damage = -1;
+
+    const newHp = currentBossData.current_hp + damage;
+    
+    // ... (Logic ตรวจสอบ Win/Lose เหมือนเดิม) ...
+    if (newHp <= 0) {
+        await checkBossResult('win');
+    } else {
+        await updateDoc(bossRef, { current_hp: newHp });
+        
+        // แจ้งเตือนแบบละเอียด
+        const msg = damage < 0 
+            ? `💥 ใช้ ${Math.abs(pointsUsed)} แต้ม -> ทำดาเมจ ${Math.abs(damage)} (Ratio 1:${ratio})` 
+            : `💊 ฮีลบอส +${damage}`;
+        showToast(msg);
+    }
+};
+
+// 3. จบเกม (Win/Lose) และแจกรางวัล
+async function checkBossResult(result) {
+    if (!currentBossData || !currentBossData.active) return;
+    
+    // ล็อกเพื่อไม่ให้รันซ้ำ
+    const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+    await updateDoc(bossRef, { active: false }); // ปิดบอสทันที
+
+    const isWin = result === 'win';
+    const pointsEffect = isWin ? currentBossData.reward : -currentBossData.penalty;
+    
+    Swal.fire({
+        title: isWin ? '🎉 VICTORY!' : '☠️ DEFEAT...',
+        text: isWin ? `บอสถูกกำจัด! ทุกคนได้รับ +${pointsEffect} แต้ม` : `หมดเวลา! บอสหนีไปได้ ทุกคนโดนหัก ${Math.abs(pointsEffect)} แต้ม`,
+        imageUrl: currentBossData.image || '',
+        imageWidth: 200,
+        confirmButtonText: 'ดำเนินการแจกจ่ายผลรางวัล',
+        allowOutsideClick: false
+    }).then(async () => {
+        // 🔄 Batch Update นักเรียนทุกคน (ระวัง Limit 500 คน)
+        await distributeMassPoints(pointsEffect, isWin ? 'Boss Reward' : 'Boss Penalty');
+    });
+}
+
+window.deleteBoss = async () => {
+    try {
+        const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+        await deleteDoc(bossRef);
+        
+        // 🔥 เปลี่ยนจุดที่พัง ให้มีการใช้เครื่องหมาย ? (Optional Chaining) หรือ if เช็คก่อน
+        const modal = document.getElementById('boss-manager-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+
+        console.log("Boss deleted successfully");
+    } catch (e) {
+        console.error("Error deleting boss: ", e);
+    }
+}
+
+// Helper เช็ค Admin (แบบง่ายๆ)
+function isAdminUser() {
+    // เช็คจาก LocalStorage หรือ Auth state ของคุณ
+    // สมมติว่าหน้าจอ Admin คือหน้าที่ login email ครู
+    return true; // (สำหรับเวอร์ชั่นนี้ให้ถือว่าเป็น Admin ไปก่อน ถ้าเป็นหน้าเด็กต้องแก้เป็น false)
+}
+
+// ==========================================
+// 🔥 AUTO BOSS DAMAGE (ฉบับใหม่: รองรับรายชื่อคนตี)
+// ==========================================
+window.autoDamageBoss = async (contributorsMap) => {
+    // เช็คว่ามีบอสอยู่ไหม
+    if (!currentBossData || !currentBossData.active) return;
+
+    // 🛡️ กันเหนียว: ถ้าส่งมาเป็นตัวเลขโดดๆ (จากโค้ดเก่า) ให้แปลงเป็น Object
+    if (typeof contributorsMap === 'number') {
+        return console.warn("AutoDamageBoss: ได้รับค่าเป็นตัวเลข (กรุณาแก้จุดเรียกใช้ให้ส่งเป็น Object)");
+    }
+
+    const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+    const ratio = currentBossData.damage_ratio || 1;
+    
+    let totalDamage = 0;
+    let updates = {};
+
+    // วนลูปคำนวณดาเมจจากแต่ละคน
+    for (const [studentId, points] of Object.entries(contributorsMap)) {
+        if (points <= 0) continue;
+        
+        // คำนวณดาเมจจริง (หาร Ratio)
+        const damage = Math.floor(points / ratio);
+        if (damage < 1) continue;
+
+        totalDamage += damage;
+
+        // บันทึกสถิติคนตี (ใช้ dot notation เพื่อ update ใน Map)
+        updates[`contributors.${studentId}`] = increment(damage);
+    }
+
+    if (totalDamage === 0) return;
+
+    // ลดเลือดบอส
+    updates.current_hp = increment(-totalDamage);
+
+    try {
+        await updateDoc(bossRef, updates);
+        console.log(`⚔️ Boss taken ${totalDamage} dmg from ${Object.keys(contributorsMap).length} students`);
+    } catch (e) {
+        console.error("Auto boss attack error:", e);
+    }
+};
+
+// ==========================================
+// 🎮 Manual Boss Control (เวอร์ชัน Checkbox)
+// ==========================================
+window.manualAdjustBoss = async (mode) => {
+    const amountStr = document.getElementById('manual-boss-dmg').value;
+    const amount = parseInt(amountStr);
+    
+    if (!amount || amount <= 0) return Swal.fire('แจ้งเตือน', 'กรุณาระบุจำนวนที่ถูกต้อง', 'warning');
+
+    const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+
+    try {
+        let updates = {};
+
+        if (mode === 'damage') {
+            updates.current_hp = increment(-amount);
+
+            // 🔥 เปลี่ยนตรงนี้: ดึงจาก Checkbox ที่ติ๊กถูก
+            const checkboxes = document.querySelectorAll('.manual-attacker-checkbox:checked');
+            const selectedCount = checkboxes.length;
+            
+            if (selectedCount > 0) {
+                // หารดาเมจเฉลี่ย
+                const damagePerPerson = Math.floor(amount / selectedCount);
+                
+                if (damagePerPerson > 0) {
+                    checkboxes.forEach(cb => {
+                        const studentId = cb.value;
+                        updates[`contributors.${studentId}`] = increment(damagePerPerson);
+                    });
+                }
+                console.log(`Manual: ${amount} dmg / ${selectedCount} students`);
+            } else {
+                console.log(`Manual: System Damage`);
+            }
+
+        } else if (mode === 'heal') {
+            updates.current_hp = increment(amount);
+        }
+
+        await updateDoc(bossRef, updates);
+        
+        // Reset Form
+        document.getElementById('manual-boss-dmg').value = '';
+        // ไม่ต้องล้าง Checkbox ก็ได้ เผื่อครูอยากย้ำอีกรอบ (หรือถ้าอยากล้างให้เรียก toggleSelectAllManual(false))
+        // toggleSelectAllManual(false); 
+        
+        Swal.fire({
+            icon: 'success',
+            title: mode === 'damage' ? 'โจมตีสำเร็จ!' : 'ฟื้นฟูบอสสำเร็จ',
+            text: `ดำเนินการเรียบร้อย`,
+            timer: 1000,
+            showConfirmButton: false
+        });
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', e.message, 'error');
+    }
+};
+
+// 📦 ฟังก์ชันดึงรายชื่อสินค้าจาก Database มาใส่ Dropdown
+window.loadBossDropOptions = async () => {
+    const select = document.getElementById('boss-drop-item');
+    if (!select) return;
+
+    // เคลียร์ค่าเก่าก่อน แล้วใส่ Option เริ่มต้น
+    select.innerHTML = '<option value="">⏳ กำลังโหลดรายการสินค้า...</option>';
+
+    try {
+        // 1. อ้างอิงไปที่ Collection สินค้า (ปกติชื่อ 'rewards' หรือ 'shop_items')
+        // ⚠️⚠️ เช็คชื่อ Collection ของคุณตรงนี้ครับ (rewards หรือ shop_items) ⚠️⚠️
+        const rewardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'rewards'); 
+        
+        // 2. ดึงข้อมูล (เอาเฉพาะที่ยังไม่ลบ หรือ Active อยู่)
+        // ถ้าไม่มี field 'active' ให้ลบ where ออกได้ครับ
+        const q = query(rewardsRef, orderBy('name')); 
+        const querySnapshot = await getDocs(q);
+
+        let html = '<option value="">-- ไม่แจกไอเทม (แจกแค่แต้ม) --</option>';
+
+        if (querySnapshot.empty) {
+            html += '<option value="" disabled>❌ ไม่พบสินค้าในร้านค้า</option>';
+        } else {
+            querySnapshot.forEach((doc) => {
+                const item = doc.data();
+                
+                // เตรียมข้อมูลที่จะบันทึกลงตัวบอส (เก็บเป็น JSON String)
+                const itemData = JSON.stringify({
+                    id: doc.id,
+                    name: item.name || 'ไม่ระบุชื่อ',
+                    image: item.image || '', // รูปสินค้า
+                    type: item.type || 'item' // ประเภท (ถ้ามี)
+                });
+
+                // สร้างตัวเลือกใน Dropdown
+                html += `<option value='${itemData}'>🎁 ${item.name} (ราคา: ${item.point_cost || 0})</option>`;
+            });
+        }
+
+        select.innerHTML = html;
+
+    } catch (e) {
+        console.error("Error loading shop items:", e);
+        select.innerHTML = '<option value="">❌ โหลดข้อมูลล้มเหลว</option>';
+    }
+};
+
+// ==========================================
+// 🎁 แจกรางวัลบอส (เวอร์ชัน Ultimate Fix: แก้ไอเทมหาย + โคลนเรทกาชา 100%)
+// ==========================================
+window.distributeMassPoints = async (amount, reason) => {
+    const safeAmount = parseInt(amount) || 0; 
+    
+    try {
+        const bossRef = doc(db, 'artifacts', appId, 'public', 'data', 'system_goals', 'current_boss');
+        const bossSnap = await getDoc(bossRef);
+        
+        if(!bossSnap.exists()) throw new Error("ไม่พบข้อมูลบอส");
+        
+        const bossData = bossSnap.data();
+        const contributors = bossData.contributors || {}; 
+        const participantIds = Object.keys(contributors);
+
+        if (participantIds.length === 0) {
+            await deleteDoc(bossRef);
+            return Swal.fire('บอสถูกกำจัด!', 'แต่ไม่มีใครได้รับรางวัล เพราะไม่มีประวัติการทำความเสียหาย', 'info');
+        }
+
+        // 🛡️ ดึงข้อมูลไอเทมและ "โคลน (Copy)" ทุกคุณสมบัติ
+        let dropItem = bossData.drop_item || null;
+        let itemTemplate = null;
+        let itemDataToGive = null;
+
+        if (dropItem) {
+            // 1. ค้นหาไอเทมต้นฉบับจากในร้านค้า (window.rewards)
+            const targetId = typeof dropItem === 'string' ? dropItem : (dropItem.id || dropItem.item_id);
+            if (targetId) {
+                itemTemplate = (window.rewards || []).find(r => r.id === targetId);
+            }
+
+            // ถ้าหาในร้านไม่เจอ ให้ใช้ข้อมูลดิบจากบอส
+            if (!itemTemplate && typeof dropItem === 'object') {
+                itemTemplate = dropItem;
+            }
+
+            if (itemTemplate) {
+                // 🔥 ท่าไม้ตาย: Deep Copy โคลนข้อมูลทุกอย่าง (min_points, max_points, ของสุ่ม ฯลฯ)
+                itemDataToGive = JSON.parse(JSON.stringify(itemTemplate)); 
+                
+                // จัดระเบียบฟิลด์ให้ตรงกับระบบกระเป๋า
+                itemDataToGive.reward_id = itemTemplate.id || 'unknown'; 
+                itemDataToGive.obtained_from = 'boss_drop';
+                itemDataToGive.obtained_at = new Date().toISOString();
+                
+                // ถ้าระบุว่าเป็นกาชา ก็ให้คงความเป็นกาชาไว้ (ไม่แปลงเป็น general_item)
+                const isGacha = itemTemplate.type === 'gacha_custom' || itemTemplate.type === 'random_box' || itemTemplate.type === 'gacha_box';
+                itemDataToGive.type = isGacha ? itemTemplate.type : (itemTemplate.type || 'general_item');
+            }
+        }
+        
+        const DAMAGE_BONUS_RATE = 0.1; 
+        const CHUNK_SIZE = 400;
+        
+        for (let i = 0; i < participantIds.length; i += CHUNK_SIZE) {
+            const chunkIds = participantIds.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            
+            chunkIds.forEach(sid => {
+                const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', sid);
+                const myDamage = parseInt(contributors[sid]) || 0;
+                
+                let bonusPoints = 0;
+                if (safeAmount > 0) {
+                    bonusPoints = Math.floor(myDamage * DAMAGE_BONUS_RATE);
+                }
+
+                const totalPointsReceived = safeAmount + bonusPoints;
+
+                // A. อัปเดตแต้ม
+                batch.update(sRef, { points: increment(totalPointsReceived) });
+                
+                // B. แจกไอเทมดรอป
+                if (typeof itemDataToGive !== 'undefined' && itemDataToGive && safeAmount >= 0) {
+                    // 🔥 สร้าง ID เฉพาะตัวให้ไอเทมแต่ละชิ้น (ป้องกันบั๊ก "ไอเทมหายไปแล้ว")
+                    const uniqueInstanceId = crypto.randomUUID();
+                    
+                    const newItemForStudent = {
+                        ...itemDataToGive,
+                        id: uniqueInstanceId,           // ให้ useItem มองเห็น
+                        instance_id: uniqueInstanceId   // ให้ useItem มองเห็น (เผื่อไว้ 2 ทาง)
+                    };
+                    
+                    batch.update(sRef, { inventory: arrayUnion(newItemForStudent) });
+                }
+            });
+            await batch.commit();
+        }
+
+        await deleteDoc(bossRef);
+        
+        let msg = `แจกรางวัลผู้กล้า ${participantIds.length} คนสำเร็จ!`;
+        if (typeof itemDataToGive !== 'undefined' && itemDataToGive && safeAmount >= 0) {
+            msg += `\n🎁 ได้รับ [${itemDataToGive.name || 'ไอเทมลึกลับ'}] เข้ากระเป๋าแล้ว!`;
+        }
+        
+        Swal.fire('Victory!', msg, 'success');
+        
+        if(document.getElementById('boss-manager-modal')) {
+            document.getElementById('boss-manager-modal').classList.add('hidden');
+        }
+
+    } catch (e) {
+        console.error("Error distributing mass points:", e);
+        Swal.fire('Error', 'เกิดข้อผิดพลาดในการแจกของ: ' + e.message, 'error');
+    }
+};
+
+// ==========================================
+// 🎁 ฟังก์ชันกดแจกรางวัลด้วยมือ (Manual Trigger)
+// ==========================================
+window.triggerManualReward = () => {
+    if (!currentBossData) return Swal.fire('Error', 'ไม่พบข้อมูลบอส', 'error');
+    
+    // ดึงค่ารางวัลที่ตั้งไว้
+    const winReward = parseInt(currentBossData.win_reward || currentBossData.reward || 500);
+    
+    // ถามย้ำเพื่อความชัวร์ (กันเผลอไปโดน)
+    Swal.fire({
+        title: 'ยืนยันการแจกรางวัล?',
+        text: `นักเรียนที่ร่วมโจมตีจะได้รับ ${winReward} แต้ม + โบนัสดาเมจ + ไอเทมดรอป`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'ยืนยัน แจกเลย!',
+        cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // เรียกฟังก์ชันแจกของ (ตัวกันบั๊กที่เราเพิ่งทำไป)
+            if (typeof window.distributeMassPoints === 'function') {
+                window.distributeMassPoints(winReward, 'พิชิตบอสสำเร็จ');
+            } else {
+                Swal.fire('Error', 'ไม่พบฟังก์ชันแจกรางวัล', 'error');
+            }
+        }
+    });
+};
+
+// ==========================================
+// 🏥 ระบบคลินิกสอบแก้ตัว (Remedial Clinic)
+// ==========================================
+
+// 1. เปิด Modal และโหลดรายชื่อ
+window.openClinicModal = () => {
+    const modal = document.getElementById('clinic-modal');
+    const select = document.getElementById('clinic-student-select');
+    const searchInput = document.getElementById('clinic-student-search');
+    
+    // จัดการตัวแปรรายชื่อนักเรียน (รองรับทั้ง window.studentsData และ students)
+    const studentList = (typeof students !== 'undefined' ? students : window.studentsData) || [];
+
+    if (studentList.length > 0) {
+        // เก็บรายชื่อ HTML ต้นฉบับไว้สำหรับการค้นหา
+        window.clinicAllStudentsHtml = studentList.map(s => 
+            `<option value="${s.id}">${s.student_id} ${s.full_name} (แต้ม: ${Math.floor(s.points)})</option>`
+        ).join('');
+        select.innerHTML = window.clinicAllStudentsHtml;
+    } else {
+        window.clinicAllStudentsHtml = '<option value="" disabled>ไม่พบข้อมูลนักเรียน</option>';
+        select.innerHTML = window.clinicAllStudentsHtml;
+    }
+
+    // รีเซ็ตค่า
+    if (searchInput) searchInput.value = '';
+    document.getElementById('clinic-chapter-input').value = '';
+    document.getElementById('clinic-base-cost').value = '50';
+    document.getElementById('clinic-attempt-count').innerText = '0';
+    document.getElementById('clinic-final-cost').innerText = '0';
+
+    modal.classList.remove('hidden');
+};
+
+window.closeClinicModal = () => {
+    document.getElementById('clinic-modal').classList.add('hidden');
+};
+
+// 🌟 ฟังก์ชันใหม่: กรองรายชื่อนักเรียนแบบ Real-time
+window.filterClinicStudents = () => {
+    const searchInput = document.getElementById('clinic-student-search').value.toLowerCase();
+    const select = document.getElementById('clinic-student-select');
+    const studentList = (typeof students !== 'undefined' ? students : window.studentsData) || [];
+    
+    if (!searchInput) {
+        select.innerHTML = window.clinicAllStudentsHtml;
+        return;
+    }
+
+    // ค้นหาจากรหัส หรือ ชื่อ
+    const filtered = studentList.filter(s => 
+        (s.student_id && s.student_id.toLowerCase().includes(searchInput)) || 
+        (s.full_name && s.full_name.toLowerCase().includes(searchInput))
+    );
+
+    if (filtered.length > 0) {
+        select.innerHTML = filtered.map(s => 
+            `<option value="${s.id}">${s.student_id} ${s.full_name} (แต้ม: ${Math.floor(s.points)})</option>`
+        ).join('');
+    } else {
+        select.innerHTML = '<option value="" disabled>-- ไม่พบรายชื่อที่ค้นหา --</option>';
+    }
+};
+
+// 2. คำนวณราคาสดๆ (x2 ตามจำนวนครั้ง)
+window.calculateClinicCost = () => {
+    const studentId = document.getElementById('clinic-student-select').value;
+    const chapter = document.getElementById('clinic-chapter-input').value.trim();
+    const baseCost = parseInt(document.getElementById('clinic-base-cost').value) || 0;
+
+    let attemptCount = 0;
+    const studentList = (typeof students !== 'undefined' ? students : window.studentsData) || [];
+
+    if (studentId && chapter && studentList.length > 0) {
+        const student = studentList.find(s => s.id === studentId);
+        if (student && student.exam_retakes && student.exam_retakes[chapter]) {
+            attemptCount = student.exam_retakes[chapter];
+        }
+    }
+
+    const finalCost = baseCost * Math.pow(2, attemptCount);
+
+    document.getElementById('clinic-attempt-count').innerText = attemptCount;
+    document.getElementById('clinic-final-cost').innerText = finalCost.toLocaleString();
+};
+
+// 3. ยืนยันการหักแต้มและบันทึกข้อมูล
+window.confirmClinicPurchase = async () => {
+    const studentId = document.getElementById('clinic-student-select').value;
+    const chapter = document.getElementById('clinic-chapter-input').value.trim();
+    const baseCost = parseInt(document.getElementById('clinic-base-cost').value) || 0;
+
+    if (!studentId) return alert('กรุณาเลือกนักเรียน');
+    if (!chapter) return alert('กรุณาระบุบทเรียนที่ต้องการแก้ตัว');
+
+    const studentList = (typeof students !== 'undefined' ? students : window.studentsData) || [];
+    const student = studentList.find(s => s.id === studentId);
+    
+    if (!student) return alert('ไม่พบข้อมูลนักเรียน');
+
+    let attemptCount = (student.exam_retakes && student.exam_retakes[chapter]) ? student.exam_retakes[chapter] : 0;
+    const finalCost = baseCost * Math.pow(2, attemptCount);
+
+    if (student.points < finalCost) {
+        return Swal.fire('แต้มไม่พอ!', `นักเรียนมีแต้ม ${Math.floor(student.points)} แต่ต้องใช้ ${finalCost} แต้ม`, 'error');
+    }
+
+    // ถามยืนยัน
+    Swal.fire({
+        title: 'ยืนยันการซื้อสิทธิ์?',
+        text: `หัก ${finalCost} แต้ม เพื่อสอบแก้ตัวบท "${chapter}" (ครั้งที่ ${attemptCount + 1})`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ec4899', // pink-500
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'ยืนยัน!',
+        cancelButtonText: 'ยกเลิก'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            try {
+                const batch = writeBatch(db);
+                const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentId);
+                const hRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'history'));
+
+                const currentRetakes = student.exam_retakes || {};
+                currentRetakes[chapter] = attemptCount + 1;
+
+                batch.update(sRef, { 
+                    points: increment(-finalCost),
+                    exam_retakes: currentRetakes 
+                });
+
+                batch.set(hRef, {
+                    student_id: student.student_id,
+                    student_name: student.full_name,
+                    action: `คลินิกแก้ตัว: บท "${chapter}" (แก้ครั้งที่ ${attemptCount + 1})`,
+                    amount: -finalCost,
+                    type: 'clinic_retake',
+                    timestamp: serverTimestamp()
+                });
+
+                await batch.commit();
+                
+                closeClinicModal();
+                Swal.fire('สำเร็จ!', `จ่ายค่าปรับ ${finalCost} แต้ม และเปิดสิทธิ์สอบให้แล้ว!`, 'success');
+
+            } catch (error) {
+                console.error("Clinic Error:", error);
+                Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + error.message, 'error');
+            }
+        }
+    });
 };
 
 // ==========================================
